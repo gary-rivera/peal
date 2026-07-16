@@ -1,0 +1,925 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tickle — Flow Redesign</title>
+<style>
+  /* ============================================================
+     TICKLE — FLOW REDESIGN  ·  a designer's teardown
+     Review chrome:  editorial serif + engineering mono on near-black
+     Device screens: faithful macOS dark-mode, system-ui
+     ============================================================ */
+
+  :root{
+    /* review canvas */
+    --void:#0b0c10;
+    --void-2:#0e1015;
+    --panel:#14161d;
+    --ink:#e9e9ef;
+    --ink-dim:#9a9ba6;
+    --ink-faint:#5f606c;
+    --hair:rgba(255,255,255,.08);
+    --hair-2:rgba(255,255,255,.045);
+    /* signature accents */
+    --gold:#f0b429;      /* the redesign / the "yes" */
+    --gold-soft:#f6cf6a;
+    --coral:#ff5c5c;     /* the pain points / the "no" */
+    --coral-soft:#ff8a7d;
+    /* macOS dark system palette (device screens) */
+    --os-blue:#0a84ff;
+    --os-red:#ff453a;
+    --os-green:#32d74b;
+    --os-menu:rgba(44,44,46,.72);
+    --os-menu-solid:#2b2b2e;
+    --os-window:#262629;
+    --os-titlebar:#37373a;
+    --os-control:#4a4a4e;
+    --os-text: rgba(255,255,255,.92);
+    --os-text-2: rgba(235,235,245,.6);
+    --os-text-3: rgba(235,235,245,.32);
+    --os-sep: rgba(255,255,255,.10);
+
+    --ui:-apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",system-ui,sans-serif;
+    --display:"Hoefler Text","Didot",Georgia,"Times New Roman",serif;
+    --mono:ui-monospace,"SF Mono","Menlo","Roboto Mono",monospace;
+  }
+
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+  body{
+    margin:0;
+    background:
+      radial-gradient(1200px 700px at 82% -8%, rgba(240,180,41,.07), transparent 60%),
+      radial-gradient(900px 600px at 8% 8%, rgba(255,92,92,.05), transparent 55%),
+      linear-gradient(180deg,var(--void-2),var(--void) 40%);
+    color:var(--ink);
+    font-family:var(--ui);
+    line-height:1.55;
+    overflow-x:hidden;
+  }
+  /* blueprint grid + grain overlay */
+  body::before{
+    content:"";position:fixed;inset:0;pointer-events:none;z-index:0;
+    background-image:
+      linear-gradient(var(--hair-2) 1px,transparent 1px),
+      linear-gradient(90deg,var(--hair-2) 1px,transparent 1px);
+    background-size:56px 56px;
+    mask-image:radial-gradient(120% 90% at 50% 0%,#000 30%,transparent 85%);
+  }
+  body::after{
+    content:"";position:fixed;inset:0;pointer-events:none;z-index:0;opacity:.5;
+    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2'/><feColorMatrix type='saturate' values='0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)' opacity='.035'/></svg>");
+  }
+  .wrap{position:relative;z-index:1;max-width:1180px;margin:0 auto;padding:0 28px 120px}
+
+  /* ---------- masthead ---------- */
+  header.mast{padding:72px 0 34px;border-bottom:1px solid var(--hair)}
+  .kicker{
+    font-family:var(--mono);font-size:11.5px;letter-spacing:.42em;text-transform:uppercase;
+    color:var(--gold);display:flex;align-items:center;gap:14px;margin-bottom:22px;
+    animation:rise .8s cubic-bezier(.2,.8,.2,1) both;
+  }
+  .kicker::before{content:"";width:34px;height:1px;background:var(--gold);opacity:.7}
+  h1{
+    font-family:var(--display);font-weight:400;font-style:italic;
+    font-size:clamp(40px,7vw,78px);line-height:.98;letter-spacing:-.01em;margin:0 0 8px;
+    animation:rise .9s .05s cubic-bezier(.2,.8,.2,1) both;
+  }
+  h1 .roman{font-style:normal}
+  h1 em{color:var(--gold);font-style:italic}
+  .dek{
+    max-width:640px;color:var(--ink-dim);font-size:16.5px;margin:14px 0 0;
+    animation:rise 1s .12s cubic-bezier(.2,.8,.2,1) both;
+  }
+  .mast-meta{
+    display:flex;flex-wrap:wrap;gap:26px;margin-top:30px;
+    font-family:var(--mono);font-size:11px;letter-spacing:.06em;color:var(--ink-faint);text-transform:uppercase;
+    animation:rise 1s .18s cubic-bezier(.2,.8,.2,1) both;
+  }
+  .mast-meta b{color:var(--ink);font-weight:500}
+
+  /* ---------- section scaffolding ---------- */
+  section{padding:64px 0 0}
+  .sec-head{display:flex;align-items:baseline;gap:18px;margin-bottom:8px}
+  .sec-num{font-family:var(--mono);font-size:12px;color:var(--ink-faint);letter-spacing:.1em}
+  .sec-title{font-family:var(--display);font-size:clamp(26px,3.6vw,38px);font-weight:400;margin:0}
+  .sec-title.problem em{font-style:italic;color:var(--coral)}
+  .sec-title.fix em{font-style:italic;color:var(--gold)}
+  .sec-sub{color:var(--ink-dim);max-width:720px;margin:6px 0 30px;font-size:15.5px}
+
+  /* ---------- storyboard rail ---------- */
+  .board{
+    display:flex;gap:30px;overflow-x:auto;padding:14px 4px 34px;scroll-snap-type:x proximity;
+    scrollbar-width:thin;scrollbar-color:var(--hair) transparent;
+  }
+  .board::-webkit-scrollbar{height:8px}
+  .board::-webkit-scrollbar-thumb{background:var(--hair);border-radius:8px}
+  .frame{flex:0 0 auto;scroll-snap-align:start;width:320px;display:flex;flex-direction:column}
+  .stage{
+    position:relative;height:250px;border-radius:16px;
+    background:linear-gradient(160deg,#0f1117,#0a0b10);
+    border:1px solid var(--hair);
+    box-shadow:0 24px 60px -30px rgba(0,0,0,.9), inset 0 1px 0 rgba(255,255,255,.03);
+    display:flex;align-items:center;justify-content:center;padding:18px;overflow:hidden;
+  }
+  .stage .os-wall{position:absolute;inset:0;background:
+    linear-gradient(155deg,#3a2f52 0%,#22314f 45%,#123047 100%);opacity:.5}
+  .stage .os-wall.b{background:linear-gradient(155deg,#4a3a2b,#2a3450 55%,#12283f);opacity:.42}
+  .frame-cap{padding:16px 4px 0}
+  .frame-step{font-family:var(--mono);font-size:11px;letter-spacing:.14em;color:var(--ink-faint);text-transform:uppercase}
+  .frame-cap h4{margin:5px 0 5px;font-size:15px;font-weight:600;letter-spacing:-.01em}
+  .frame-cap p{margin:0;color:var(--ink-dim);font-size:13.5px;line-height:1.5}
+  .pin{
+    display:inline-flex;align-items:center;justify-content:center;
+    width:19px;height:19px;border-radius:50%;font-family:var(--mono);font-size:11px;font-weight:600;
+    margin-right:7px;vertical-align:1px;
+  }
+  .pin.bad{background:rgba(255,92,92,.16);color:var(--coral-soft);border:1px solid rgba(255,92,92,.4)}
+  .pin.good{background:rgba(240,180,41,.15);color:var(--gold-soft);border:1px solid rgba(240,180,41,.42)}
+
+  /* connector arrow between frames */
+  .flowarrow{flex:0 0 auto;align-self:flex-start;margin-top:110px;color:var(--ink-faint);
+    font-family:var(--mono);font-size:20px;opacity:.6}
+
+  /* =========================================================
+     macOS DEVICE PRIMITIVES  (system-ui, faithful dark mode)
+     ========================================================= */
+  .os{font-family:var(--ui);color:var(--os-text);position:relative;z-index:2}
+
+  /* menu bar strip */
+  .menubar{
+    position:absolute;top:0;left:0;right:0;height:26px;
+    background:rgba(30,30,32,.82);backdrop-filter:blur(18px);
+    border-bottom:1px solid rgba(255,255,255,.06);
+    display:flex;align-items:center;justify-content:flex-end;gap:15px;padding:0 12px;
+    font-size:12.5px;color:var(--os-text);
+  }
+  .mb-item{opacity:.9;font-size:12px}
+  .mb-tickle{display:inline-flex;align-items:center;gap:5px;font-variant-numeric:tabular-nums}
+  .metronome{width:15px;height:15px;display:inline-block}
+  .metronome path{fill:currentColor}
+  .mb-count{font-weight:600;letter-spacing:.02em}
+  .mb-count.dim{opacity:.45}
+
+  /* dropdown menu */
+  .menu{
+    width:264px;border-radius:11px;padding:5px;
+    background:var(--os-menu);backdrop-filter:blur(40px) saturate(160%);
+    border:1px solid rgba(255,255,255,.12);
+    box-shadow:0 30px 70px -18px rgba(0,0,0,.72), inset 0 1px 0 rgba(255,255,255,.09);
+    font-size:13.5px;
+  }
+  .mi{display:flex;align-items:center;gap:9px;padding:5px 9px;border-radius:6px;line-height:1.3;white-space:nowrap}
+  .mi .key{margin-left:auto;color:var(--os-text-3);font-size:12.5px}
+  .mi.sel{background:var(--os-blue);color:#fff}
+  .mi.sel .key{color:rgba(255,255,255,.75)}
+  .mi.dis{color:var(--os-text-3)}
+  .mi .chev{margin-left:auto;color:var(--os-text-3)}
+  .mhead{padding:8px 9px 3px;font-size:11px;font-weight:600;letter-spacing:.02em;
+    text-transform:uppercase;color:var(--os-text-3)}
+  .msep{height:1px;background:var(--os-sep);margin:5px 6px}
+  .mrow-num{font-variant-numeric:tabular-nums}
+
+  /* floating titled panel (current New Timer) */
+  .oswin{
+    width:290px;border-radius:12px;overflow:hidden;
+    background:var(--os-window);
+    border:1px solid rgba(0,0,0,.5);
+    box-shadow:0 34px 80px -20px rgba(0,0,0,.85), inset 0 1px 0 rgba(255,255,255,.05);
+  }
+  .titlebar{height:30px;background:linear-gradient(180deg,#3b3b3e,#333336);
+    display:flex;align-items:center;padding:0 11px;position:relative}
+  .lights{display:flex;gap:8px}
+  .light{width:12px;height:12px;border-radius:50%}
+  .l-r{background:#ff5f57;box-shadow:inset 0 0 0 .5px rgba(0,0,0,.2)}
+  .l-y{background:#febc2e}
+  .l-g{background:#28c840}
+  .titlebar .tt{position:absolute;left:0;right:0;text-align:center;font-size:12.5px;font-weight:600;color:var(--os-text-2)}
+  .oswin .body{padding:14px 15px 16px}
+
+  .field{display:grid;grid-template-columns:82px 1fr;align-items:center;gap:10px;margin-bottom:11px}
+  .field > label{font-size:12.5px;color:var(--os-text-2);text-align:right}
+  .os-slider{position:relative;height:16px;display:flex;align-items:center}
+  .os-track{height:4px;border-radius:3px;background:#48484c;width:100%;position:relative;overflow:visible}
+  .os-track .fill{position:absolute;left:0;top:0;bottom:0;border-radius:3px;background:var(--os-blue)}
+  .os-track .tickrow{position:absolute;left:0;right:0;top:-4px;bottom:-4px}
+  .os-knob{position:absolute;top:50%;width:14px;height:14px;border-radius:50%;
+    background:#f4f4f5;transform:translate(-50%,-50%);box-shadow:0 1px 3px rgba(0,0,0,.5)}
+  .fval{font-size:12.5px;color:var(--os-text)}
+  .fval.err{color:var(--os-red)}
+  .row2{display:flex;align-items:center;gap:8px}
+  .popup{
+    display:inline-flex;align-items:center;gap:8px;background:var(--os-control);
+    border-radius:6px;padding:3px 6px 3px 9px;font-size:12.5px;box-shadow:0 1px 2px rgba(0,0,0,.35);
+  }
+  .popup .cz{display:inline-flex;flex-direction:column;line-height:.6;color:var(--os-blue);font-size:9px}
+  .btn{
+    background:var(--os-control);border-radius:6px;padding:4px 12px;font-size:12.5px;
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.08),0 1px 2px rgba(0,0,0,.35);white-space:nowrap;
+  }
+  .btn.primary{background:var(--os-blue);box-shadow:0 1px 2px rgba(0,0,0,.4)}
+  .timepick{display:inline-flex;align-items:center;background:#3a3a3e;border-radius:5px;overflow:hidden;font-variant-numeric:tabular-nums}
+  .timepick .seg{padding:3px 5px;font-size:12.5px}
+  .timepick .seg.on{background:var(--os-blue);color:#fff}
+  .timepick .step{display:flex;flex-direction:column;border-left:1px solid rgba(0,0,0,.3);color:var(--os-text-2);font-size:8px;padding:0 4px;line-height:1}
+
+  /* NSAlert sheet */
+  .alert{
+    width:250px;border-radius:12px;background:#2c2c2e;padding:18px 18px 14px;text-align:center;
+    border:1px solid rgba(0,0,0,.5);box-shadow:0 34px 80px -18px rgba(0,0,0,.85);
+  }
+  .alert .badge{width:44px;height:44px;border-radius:50%;margin:0 auto 10px;
+    background:rgba(255,69,58,.16);display:flex;align-items:center;justify-content:center;
+    color:var(--os-red);font-size:24px}
+  .alert h5{margin:0 0 5px;font-size:13.5px;font-weight:600}
+  .alert p{margin:0 0 13px;font-size:12px;color:var(--os-text-2);line-height:1.45}
+  .alert .btn.primary{width:100%;padding:5px}
+
+  /* =========================================================
+     THE REDESIGN — anchored popover composer (interactive)
+     ========================================================= */
+  .hero{
+    position:relative;margin-top:8px;border-radius:22px;padding:44px;
+    background:
+      radial-gradient(700px 380px at 84% -20%,rgba(240,180,41,.10),transparent 60%),
+      linear-gradient(165deg,#12141b,#0c0d12);
+    border:1px solid var(--hair);
+    box-shadow:0 40px 120px -50px rgba(0,0,0,.9), inset 0 1px 0 rgba(255,255,255,.04);
+    overflow:hidden;
+  }
+  .hero-grid{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:44px;align-items:start}
+  @media(max-width:880px){.hero-grid{grid-template-columns:1fr}.hero{padding:26px}}
+
+  .hero-copy .eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.3em;
+    text-transform:uppercase;color:var(--gold);margin-bottom:16px}
+  .hero-copy h3{font-family:var(--display);font-size:clamp(26px,3.4vw,40px);font-weight:400;
+    line-height:1.05;margin:0 0 16px}
+  .hero-copy h3 em{font-style:italic;color:var(--gold)}
+  .hero-copy p{color:var(--ink-dim);font-size:15px;max-width:460px;margin:0 0 14px}
+  .principles{list-style:none;padding:0;margin:22px 0 0;display:grid;gap:14px}
+  .principles li{display:grid;grid-template-columns:26px 1fr;gap:12px;align-items:start}
+  .principles .n{font-family:var(--mono);font-size:11px;color:var(--gold);padding-top:2px;
+    border-top:1px solid rgba(240,180,41,.4);text-align:center}
+  .principles b{font-weight:600;font-size:14px;display:block;margin-bottom:1px}
+  .principles span{color:var(--ink-dim);font-size:13px}
+
+  /* the live popover mock — anchored under the menu bar icon */
+  .anchor-stage{position:relative;padding-top:30px}
+  .mini-menubar{position:absolute;top:0;right:22px;display:flex;align-items:center;gap:5px;
+    font-family:var(--ui);font-size:12px;color:var(--os-text);
+    background:rgba(30,30,32,.9);backdrop-filter:blur(18px);
+    padding:4px 8px;border-radius:6px;z-index:3;box-shadow:0 6px 16px rgba(0,0,0,.4)}
+  .caret{position:absolute;top:24px;right:40px;width:16px;height:9px;overflow:hidden;z-index:4}
+  .caret::after{content:"";position:absolute;top:4px;left:2px;width:12px;height:12px;
+    background:var(--os-menu-solid);transform:rotate(45deg);
+    border-left:1px solid rgba(255,255,255,.12);border-top:1px solid rgba(255,255,255,.12)}
+
+  .popover{
+    position:relative;border-radius:14px;overflow:visible;
+    background:rgba(38,38,42,.86);backdrop-filter:blur(46px) saturate(160%);
+    border:1px solid rgba(255,255,255,.13);
+    box-shadow:0 34px 80px -20px rgba(0,0,0,.8), inset 0 1px 0 rgba(255,255,255,.09);
+    color:var(--os-text);font-family:var(--ui);
+  }
+  .pop-sec{padding:11px 14px}
+  .pop-sec + .pop-sec{border-top:1px solid rgba(255,255,255,.08)}
+  .pop-label{font-size:10.5px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;
+    color:var(--os-text-3);margin-bottom:8px;display:flex;align-items:center;justify-content:space-between}
+  .pop-label .add{color:var(--gold-soft);font-size:15px;cursor:pointer;line-height:1}
+
+  /* running timer card inside popover */
+  .tcard{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.06);
+    border-radius:9px;padding:9px 10px;margin-bottom:8px}
+  .tcard:last-child{margin-bottom:0}
+  .tcard-top{display:flex;align-items:center;gap:8px;font-size:12.5px}
+  .tcard-top .dot{width:7px;height:7px;border-radius:50%;background:var(--os-green);
+    box-shadow:0 0 0 3px rgba(50,215,75,.16);flex:0 0 auto}
+  .tcard-top .dot.sched{background:var(--gold);box-shadow:0 0 0 3px rgba(240,180,41,.16)}
+  .tcard-top .meta{color:var(--os-text-2);font-size:11.5px;margin-left:auto;font-variant-numeric:tabular-nums}
+  .tcard-top .prog{font-weight:600;font-variant-numeric:tabular-nums}
+  .tcard-sub{color:var(--os-text-3);font-size:11px;margin-top:3px;display:flex;gap:6px;align-items:center}
+  .tcard-actions{display:flex;gap:6px;margin-left:auto}
+  .chip-btn{font-size:10.5px;color:var(--os-text-2);border:1px solid rgba(255,255,255,.12);
+    border-radius:5px;padding:1px 7px;cursor:pointer;background:transparent}
+  .chip-btn:hover{background:rgba(255,255,255,.08);color:#fff}
+
+  /* THE COMPOSER controls */
+  .comp{padding:12px 14px 14px}
+  .comp-row{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+  .comp-row .clab{font-size:12px;color:var(--os-text-2);width:74px;flex:0 0 auto}
+  .comp-row .rng{flex:1;position:relative;height:18px;display:flex;align-items:center}
+  input[type=range].mac{
+    -webkit-appearance:none;appearance:none;width:100%;height:4px;border-radius:3px;
+    background:linear-gradient(90deg,var(--gold) var(--pct,40%),#4a4a4e var(--pct,40%));
+    outline:none;margin:0;cursor:pointer;
+  }
+  input[type=range].mac::-webkit-slider-thumb{
+    -webkit-appearance:none;width:15px;height:15px;border-radius:50%;background:#f5f5f7;
+    box-shadow:0 1px 3px rgba(0,0,0,.55);cursor:grab;border:none;
+  }
+  input[type=range].mac::-webkit-slider-thumb:active{cursor:grabbing}
+  input[type=range].mac::-moz-range-thumb{width:15px;height:15px;border-radius:50%;
+    background:#f5f5f7;border:none;box-shadow:0 1px 3px rgba(0,0,0,.55)}
+  .comp-row .cval{font-size:12px;width:52px;flex:0 0 auto;text-align:right;
+    font-variant-numeric:tabular-nums;color:var(--os-text)}
+  .unitseg{display:inline-flex;background:rgba(255,255,255,.07);border-radius:6px;padding:2px;flex:0 0 auto}
+  .unitseg button{font-family:var(--ui);font-size:11px;color:var(--os-text-2);border:none;background:transparent;
+    padding:2px 7px;border-radius:4px;cursor:pointer}
+  .unitseg button.on{background:rgba(255,255,255,.16);color:#fff;box-shadow:0 1px 2px rgba(0,0,0,.3)}
+
+  /* live tick-mark rail — the hero of the redesign */
+  .railwrap{margin:6px 0 4px;padding:14px 12px 10px;border-radius:10px;
+    background:linear-gradient(180deg,rgba(240,180,41,.06),rgba(0,0,0,.14));
+    border:1px solid rgba(240,180,41,.16)}
+  .railhead{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px}
+  .railhead .t{font-size:11px;font-weight:600;color:var(--gold-soft);letter-spacing:.02em}
+  .railhead .r{font-size:10.5px;color:var(--os-text-3);font-variant-numeric:tabular-nums}
+  .rail{position:relative;height:66px;margin-top:2px}
+  .rail .axis{position:absolute;left:0;right:0;bottom:16px;height:1px;background:rgba(255,255,255,.14)}
+  .rail .mark{position:absolute;bottom:16px;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;transition:left .12s ease}
+  .rail .bar{width:3px;border-radius:2px;background:linear-gradient(180deg,var(--gold),rgba(240,180,41,.35));
+    transition:height .12s ease}
+  .rail .cnt{font-family:var(--mono);font-size:9px;color:var(--gold-soft);margin-top:2px;position:absolute;bottom:-13px}
+  .rail .finish{position:absolute;right:0;bottom:16px;transform:translateX(50%);
+    display:flex;flex-direction:column;align-items:center}
+  .rail .finish .flag{width:2px;height:44px;background:repeating-linear-gradient(180deg,rgba(255,255,255,.5) 0 4px,transparent 4px 8px)}
+  .rail .finish .lbl{font-family:var(--mono);font-size:8.5px;color:var(--os-text-3);position:absolute;bottom:-13px;white-space:nowrap;right:-4px}
+  .playhead{position:absolute;bottom:12px;width:1px;background:var(--coral-soft);top:0;
+    box-shadow:0 0 8px rgba(255,138,125,.7);transition:none}
+  .playhead::after{content:"";position:absolute;top:-2px;left:-3px;width:7px;height:7px;border-radius:50%;
+    background:var(--coral-soft);box-shadow:0 0 8px rgba(255,138,125,.9)}
+
+  .comp-foot{display:flex;align-items:center;gap:10px;margin-top:6px}
+  .startseg{display:inline-flex;background:rgba(255,255,255,.07);border-radius:7px;padding:2px}
+  .startseg button{font-family:var(--ui);font-size:11.5px;color:var(--os-text-2);border:none;background:transparent;
+    padding:3px 10px;border-radius:5px;cursor:pointer}
+  .startseg button.on{background:rgba(255,255,255,.16);color:#fff;box-shadow:0 1px 2px rgba(0,0,0,.3)}
+  .starttime{display:none;align-items:center;background:#3a3a3e;border-radius:6px;padding:3px 8px;
+    font-size:12px;font-variant-numeric:tabular-nums;color:var(--os-text)}
+  .starttime.show{display:inline-flex}
+  #startBtn{
+    margin-left:auto;background:var(--gold);color:#1a1400;font-weight:600;border:none;
+    border-radius:7px;padding:6px 14px;font-size:12.5px;font-family:var(--ui);cursor:pointer;
+    box-shadow:0 4px 14px -4px rgba(240,180,41,.6);transition:transform .1s ease,filter .1s ease;white-space:nowrap;
+  }
+  #startBtn:hover{filter:brightness(1.06)}
+  #startBtn:active{transform:translateY(1px)}
+  .cap-note{font-size:10.5px;color:var(--os-text-3);margin-top:8px;display:flex;align-items:center;gap:6px}
+  .cap-note .g{color:var(--gold-soft)}
+  .cap-note.hit .g{color:var(--coral-soft)}
+
+  /* numbered annotation pins on the popover's edge — each maps to a principle at left */
+  .anno-pin{position:absolute;left:-25px;top:50%;transform:translateY(-50%);
+    width:22px;height:22px;border-radius:50%;z-index:6;
+    display:flex;align-items:center;justify-content:center;
+    font-family:var(--mono);font-size:9.5px;font-weight:600;letter-spacing:.02em;
+    color:var(--gold-soft);background:#221a08;border:1px solid rgba(240,180,41,.55);
+    box-shadow:0 4px 12px rgba(0,0,0,.5);pointer-events:none}
+  .tcard,.comp-row,.railwrap,.comp-foot{position:relative}
+
+  /* comparison ledger */
+  .ledger{margin-top:54px;border:1px solid var(--hair);border-radius:16px;overflow:hidden}
+  .ledger .lrow{display:grid;grid-template-columns:1fr 1fr;gap:0}
+  .ledger .lrow > div{padding:16px 22px;border-bottom:1px solid var(--hair)}
+  .ledger .lrow > div:first-child{border-right:1px solid var(--hair)}
+  .ledger .lhead > div{background:rgba(255,255,255,.02);font-family:var(--mono);font-size:11px;
+    letter-spacing:.14em;text-transform:uppercase}
+  .ledger .lhead .before{color:var(--coral)}
+  .ledger .lhead .after{color:var(--gold)}
+  .ledger .before-c{color:var(--ink-dim);font-size:14px}
+  .ledger .after-c{color:var(--ink);font-size:14px}
+  .ledger .before-c b,.ledger .after-c b{font-weight:600;color:var(--ink)}
+  @media(max-width:640px){.ledger .lrow{grid-template-columns:1fr}.ledger .lrow>div:first-child{border-right:none}}
+
+  footer{margin-top:70px;padding-top:24px;border-top:1px solid var(--hair);
+    font-family:var(--mono);font-size:11px;color:var(--ink-faint);letter-spacing:.06em;
+    display:flex;flex-wrap:wrap;gap:8px 24px;justify-content:space-between}
+
+  @keyframes rise{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
+  .reveal{animation:rise .8s cubic-bezier(.2,.8,.2,1) both}
+</style>
+
+<div class="wrap">
+
+  <!-- ================= MASTHEAD ================= -->
+  <header class="mast">
+    <div class="kicker">Menu-bar UX teardown · Tickle</div>
+    <h1><span class="roman">The</span> <em>escalating cue</em>,<br>made <span class="roman">visible.</span></h1>
+    <p class="dek">Tickle paces an interview by playing a growing burst of ticks — one at the first
+      mark, two at the second, up to nine — as the window runs down. Today that idea is invisible
+      until a blocking alert scolds you. This is a redesign of the whole flow around it.</p>
+    <div class="mast-meta">
+      <span>Surface · <b>Menu bar + config panel</b></span>
+      <span>Stack · <b>AppKit</b></span>
+      <span>Focus · <b>End-to-end flow</b></span>
+      <span>Centerpiece · <b>Anchored inline composer</b></span>
+    </div>
+  </header>
+
+  <!-- ================= CURRENT FLOW ================= -->
+  <section class="reveal">
+    <div class="sec-head">
+      <span class="sec-num">01</span>
+      <h2 class="sec-title problem">The current flow, and where it <em>breaks</em></h2>
+    </div>
+    <p class="sec-sub">Five hops from intent to a running timer — with the failure states discovered
+      only after commitment. Scroll the storyboard; numbered pins map to the ledger below.</p>
+
+    <div class="board">
+      <!-- 1: menu bar -->
+      <div class="frame">
+        <div class="stage os">
+          <div class="os-wall"></div>
+          <div class="menubar">
+            <span class="mb-item">Wed 11:47</span>
+            <span class="mb-tickle"><svg class="metronome" viewBox="0 0 24 24"><path d="M8 2h8l3 20H5L8 2zm3.2 3L9.5 18h1.4l.4-3h1.4l.4 3h1.4L12.8 5h-1.6zm.3 6.6l.5-4 .5 4h-1z"/></svg><span class="mb-count">3/9</span></span>
+          </div>
+        </div>
+        <div class="frame-cap">
+          <div class="frame-step">Step 01</div>
+          <h4>Icon shows “3/9”</h4>
+          <p><span class="pin bad">5</span>The escalating-tick model is compressed to two numbers with no legend.</p>
+        </div>
+      </div>
+
+      <div class="flowarrow os">→</div>
+
+      <!-- 2: dropdown -->
+      <div class="frame">
+        <div class="stage os" style="padding-top:12px;align-items:flex-start">
+          <div class="os-wall"></div>
+          <div class="menu" style="margin-top:8px">
+            <div class="mi sel">Start timer<span class="key">⌘,</span></div>
+            <div class="mi">Play sample ticks<span class="key">⌘T</span></div>
+            <div class="msep"></div>
+            <div class="mhead">Ongoing</div>
+            <div class="mi"><span class="mrow-num">3/9 · 2:14 / 45m · Every 5 min</span><span class="chev">›</span></div>
+            <div class="msep"></div>
+            <div class="mi dis">Quit Tickle<span class="key">⌘Q</span></div>
+          </div>
+        </div>
+        <div class="frame-cap">
+          <div class="frame-step">Step 02</div>
+          <h4>“Start timer” chosen</h4>
+          <p>Creating a timer means leaving the menu for a whole separate window.</p>
+        </div>
+      </div>
+
+      <div class="flowarrow os">→</div>
+
+      <!-- 3: centered panel -->
+      <div class="frame">
+        <div class="stage os">
+          <div class="os-wall b"></div>
+          <div class="oswin">
+            <div class="titlebar">
+              <div class="lights"><span class="light l-r"></span><span class="light l-y"></span><span class="light l-g"></span></div>
+              <div class="tt">New Timer</div>
+            </div>
+            <div class="body">
+              <div class="field">
+                <label>Tick every:</label>
+                <div class="row2">
+                  <div class="os-slider" style="width:78px"><div class="os-track"><div class="fill" style="width:12%"></div><div class="os-knob" style="left:12%"></div></div></div>
+                  <span class="fval">6 sec</span>
+                  <span class="popup">sec <span class="cz">▲▼</span></span>
+                </div>
+              </div>
+              <div class="field">
+                <label>Time window:</label>
+                <div class="row2">
+                  <div class="os-slider" style="width:70px"><div class="os-track"><div class="fill" style="width:5%"></div><div class="os-knob" style="left:5%"></div></div></div>
+                  <span class="fval err">1 min · 10 ticks</span>
+                  <span class="popup">min <span class="cz">▲▼</span></span>
+                </div>
+              </div>
+              <div class="field">
+                <label>Tick sound:</label>
+                <span class="popup" style="justify-self:start">Purr <span class="cz">▲▼</span></span>
+              </div>
+              <div class="field">
+                <label>Start at:</label>
+                <div class="row2">
+                  <span class="timepick"><span class="seg">11</span>:<span class="seg on">48</span><span class="seg">PM</span><span class="step">▲▼</span></span>
+                  <span class="btn">Schedule Start</span>
+                </div>
+              </div>
+              <div class="field"><label></label><span class="btn" style="justify-self:start">Start Now</span></div>
+            </div>
+          </div>
+        </div>
+        <div class="frame-cap">
+          <div class="frame-step">Step 03</div>
+          <h4>Panel opens screen-centered</h4>
+          <p><span class="pin bad">1</span>Detached from the icon. <span class="pin bad">2</span>“10 ticks” shows red but Start is still live. <span class="pin bad">3</span>Two rival start buttons.</p>
+        </div>
+      </div>
+
+      <div class="flowarrow os">→</div>
+
+      <!-- 4: alert -->
+      <div class="frame">
+        <div class="stage os">
+          <div class="os-wall b"></div>
+          <div class="alert">
+            <div class="badge">!</div>
+            <h5>Can’t start timer</h5>
+            <p>This window fits 10 tick marks — the most Tickle supports is 9. Lengthen the interval or shorten the window.</p>
+            <div class="btn primary">OK</div>
+          </div>
+        </div>
+        <div class="frame-cap">
+          <div class="frame-step">Step 04</div>
+          <h4>Blocked — after the click</h4>
+          <p><span class="pin bad">2</span>The constraint is enforced only once you commit, then thrown back as modal work.</p>
+        </div>
+      </div>
+
+      <div class="flowarrow os">→</div>
+
+      <!-- 5: back to terse menu -->
+      <div class="frame">
+        <div class="stage os" style="padding-top:12px;align-items:flex-start">
+          <div class="os-wall"></div>
+          <div class="menu" style="margin-top:8px">
+            <div class="mhead">Ongoing</div>
+            <div class="mi"><span class="mrow-num" style="font-size:12px">4/9 · 3:02 / 45m · Every 5 min · Purr</span><span class="chev">›</span></div>
+            <div class="msep"></div>
+            <div class="mi sel">Start timer<span class="key">⌘,</span></div>
+          </div>
+        </div>
+        <div class="frame-cap">
+          <div class="frame-step">Step 05</div>
+          <h4>Progress = one dense row</h4>
+          <p><span class="pin bad">4</span>No way to see the pacing or edit a live timer — only Stop / Reset in a submenu.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= THE REDESIGN ================= -->
+  <section class="reveal">
+    <div class="sec-head">
+      <span class="sec-num">02</span>
+      <h2 class="sec-title fix">One surface. Always valid. <em>Self-explaining.</em></h2>
+    </div>
+    <p class="sec-sub">The separate panel collapses into an inline composer inside the menu-bar
+      popover — anchored to the icon, with a live tick-mark rail and controls that cannot express
+      an invalid timer. Drag the sliders below; the rail, the derived window, and the single Start
+      button all respond in real time.</p>
+
+    <div class="hero">
+      <div class="hero-grid">
+        <!-- LEFT: copy + principles -->
+        <div class="hero-copy">
+          <div class="eyebrow">The centerpiece</div>
+          <h3>The composer <em>lives where you clicked.</em></h3>
+          <p>No screen-centered window, no context switch. The popover drops from the icon and holds
+            everything: your running timers up top, a new-timer composer below.</p>
+          <p>The escalating burst that defines Tickle is finally shown — a rail of marks whose height
+            climbs 1 → N as the window closes, with a finish flag for the double chime.</p>
+          <ul class="principles">
+            <li><span class="n">01</span><div><b>Valid by construction</b><span>The window slider’s ceiling is 9 × interval. You physically cannot author a 10-mark timer, so the blocking alert disappears entirely.</span></div></li>
+            <li><span class="n">02</span><div><b>The model is the preview</b><span>Every mark you’ll hear is on screen, sized by its tick count. “N ticks at the Nth mark, max 9” stops being lore.</span></div></li>
+            <li><span class="n">03</span><div><b>One adaptive commit</b><span>“Now / Later” is a toggle, not two buttons. The single Start button rewrites itself — “Start now” or “Start at 11:48 PM.”</span></div></li>
+            <li><span class="n">04</span><div><b>Edit after launch</b><span>Running timers show the same rail and an inline Adjust — pacing is legible and tunable, not frozen in a submenu.</span></div></li>
+          </ul>
+        </div>
+
+        <!-- RIGHT: the interactive popover -->
+        <div class="anchor-stage">
+          <div class="mini-menubar os">
+            <svg class="metronome" viewBox="0 0 24 24" style="width:14px;height:14px"><path d="M8 2h8l3 20H5L8 2zm3.2 3L9.5 18h1.4l.4-3h1.4l.4 3h1.4L12.8 5h-1.6z"/></svg>
+            <span class="mb-count" id="mbCount">7/9</span>
+          </div>
+          <div class="caret"></div>
+
+          <div class="popover os">
+            <!-- running timers -->
+            <div class="pop-sec">
+              <div class="pop-label">Timers <span class="add" title="new timer">＋</span></div>
+              <div id="activeList">
+                <div class="tcard">
+                  <div class="anno-pin" title="Edit after launch">04</div>
+                  <div class="tcard-top">
+                    <span class="dot"></span>
+                    <span class="prog">7/9</span>
+                    <span class="tcard-actions"><button class="chip-btn">Adjust</button><button class="chip-btn">Stop</button></span>
+                  </div>
+                  <div class="tcard-sub">Every 5 min · 45 min window · Purr · finishes 12:32</div>
+                </div>
+                <div class="tcard">
+                  <div class="tcard-top">
+                    <span class="dot sched"></span>
+                    <span class="prog" style="font-weight:500;color:var(--os-text-2)">Starts 1:15 PM</span>
+                    <span class="meta">in 28:04</span>
+                  </div>
+                  <div class="tcard-sub">Every 6 min · 30 min window · Tink</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- THE COMPOSER -->
+            <div class="pop-sec comp">
+              <div class="pop-label">New timer</div>
+
+              <div class="comp-row">
+                <span class="clab">Tick every</span>
+                <span class="rng"><input type="range" class="mac" id="intSlider" min="1" max="60" value="5"></span>
+                <span class="cval" id="intVal">5 min</span>
+              </div>
+              <div class="comp-row">
+                <span class="clab"></span>
+                <span class="unitseg" id="intUnit">
+                  <button data-u="sec">sec</button><button data-u="min" class="on">min</button><button data-u="hr">hr</button>
+                </span>
+              </div>
+
+              <div class="comp-row">
+                <div class="anno-pin" title="Valid by construction">01</div>
+                <span class="clab">For</span>
+                <span class="rng"><input type="range" class="mac" id="winSlider" min="1" max="45" value="45"></span>
+                <span class="cval" id="winVal">45 min</span>
+              </div>
+              <div class="comp-row">
+                <span class="clab"></span>
+                <span class="unitseg" id="winUnit">
+                  <button data-u="sec">sec</button><button data-u="min" class="on">min</button><button data-u="hr">hr</button>
+                </span>
+              </div>
+
+              <!-- live rail -->
+              <div class="railwrap">
+                <div class="anno-pin" title="The model is the preview">02</div>
+                <div class="railhead">
+                  <span class="t" id="railTitle">9 escalating cues</span>
+                  <span class="r" id="railRange">0 → 45 min</span>
+                </div>
+                <div class="rail" id="rail"></div>
+              </div>
+              <div class="cap-note" id="capNote"><span class="g">◆</span> Ceiling is <b style="font-weight:600">&nbsp;9 cues&nbsp;</b> — the slider stops itself before it can exceed.</div>
+
+              <!-- adaptive commit -->
+              <div class="comp-foot">
+                <div class="anno-pin" title="One adaptive commit">03</div>
+                <span class="startseg" id="startSeg">
+                  <button data-m="now" class="on">Now</button><button data-m="later">Later</button>
+                </span>
+                <span class="starttime" id="startTime">11:48 PM</span>
+                <button id="startBtn">Start now</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- redesigned flow storyboard -->
+    <div class="sec-head" style="margin-top:58px">
+      <span class="sec-num">03</span>
+      <h2 class="sec-title fix">The new flow, end to end</h2>
+    </div>
+    <p class="sec-sub">Three hops, zero context switches, no failure state to recover from.</p>
+
+    <div class="board">
+      <div class="frame">
+        <div class="stage os" style="align-items:flex-start;padding-top:14px">
+          <div class="os-wall"></div>
+          <div style="position:relative;margin:6px auto 0">
+            <div class="mini-menubar" style="position:relative;top:auto;right:auto;margin:0 auto 10px;width:max-content">
+              <svg class="metronome" viewBox="0 0 24 24" style="width:14px;height:14px"><path d="M8 2h8l3 20H5L8 2zm3.2 3L9.5 18h1.4l.4-3h1.4l.4 3h1.4L12.8 5h-1.6z"/></svg><span class="mb-count">7/9</span>
+            </div>
+            <div class="popover os" style="width:230px">
+              <div class="pop-sec"><div class="pop-label">Timers <span class="add">＋</span></div>
+                <div class="tcard"><div class="tcard-top"><span class="dot"></span><span class="prog">7/9</span><span class="meta">3:40 left</span></div><div class="tcard-sub">Every 5 min · Purr</div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="frame-cap">
+          <div class="frame-step">Step 01</div>
+          <h4>Popover drops from the icon</h4>
+          <p><span class="pin good">1</span>Anchored under the menu bar — the caret ties it to where you clicked.</p>
+        </div>
+      </div>
+
+      <div class="flowarrow os">→</div>
+
+      <div class="frame">
+        <div class="stage os">
+          <div class="os-wall"></div>
+          <div class="railwrap" style="width:230px;margin:0">
+            <div class="railhead"><span class="t">7 escalating cues</span><span class="r">0 → 42 min</span></div>
+            <div class="rail" id="railDemo"></div>
+          </div>
+        </div>
+        <div class="frame-cap">
+          <div class="frame-step">Step 02</div>
+          <h4>Compose against the rail</h4>
+          <p><span class="pin good">2</span>Every drag redraws the cues. <span class="pin good">5</span>The model teaches itself; nothing is opaque.</p>
+        </div>
+      </div>
+
+      <div class="flowarrow os">→</div>
+
+      <div class="frame">
+        <div class="stage os">
+          <div class="os-wall"></div>
+          <div style="display:flex;flex-direction:column;gap:12px;align-items:center">
+            <div class="comp-foot" style="background:rgba(38,38,42,.9);padding:10px 12px;border-radius:10px;border:1px solid rgba(255,255,255,.1);width:302px">
+              <span class="startseg"><button class="on">Now</button><button>Later</button></span>
+              <button style="margin-left:auto;background:var(--gold);color:#1a1400;font-weight:600;border:none;border-radius:7px;padding:6px 14px;font-size:12.5px;font-family:var(--ui);white-space:nowrap">Start now</button>
+            </div>
+            <div style="font-family:var(--mono);font-size:10px;color:var(--ink-faint)">— toggle —</div>
+            <div class="comp-foot" style="background:rgba(38,38,42,.9);padding:10px 12px;border-radius:10px;border:1px solid rgba(255,255,255,.1);width:302px">
+              <span class="startseg"><button>Now</button><button class="on">Later</button></span>
+              <span class="starttime show" style="font-size:11px;white-space:nowrap">11:48 PM</span>
+              <button style="margin-left:auto;background:var(--gold);color:#1a1400;font-weight:600;border:none;border-radius:7px;padding:6px 10px;font-size:11px;font-family:var(--ui);white-space:nowrap">Start at 11:48</button>
+            </div>
+          </div>
+        </div>
+        <div class="frame-cap">
+          <div class="frame-step">Step 03</div>
+          <h4>One button, two truths</h4>
+          <p><span class="pin good">3</span>The Now/Later toggle rewrites a single commit — no rival buttons, and it’s always valid, so it always succeeds.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- comparison ledger -->
+    <div class="ledger reveal">
+      <div class="lrow lhead">
+        <div class="before">Before · the alert-driven panel</div>
+        <div class="after">After · the inline composer</div>
+      </div>
+      <div class="lrow">
+        <div class="before-c">A separate window opens <b>centered on screen</b>, disconnected from the icon you clicked.</div>
+        <div class="after-c">A popover is <b>anchored to the menu-bar icon</b> with a caret — one continuous gesture.</div>
+      </div>
+      <div class="lrow">
+        <div class="before-c">Invalid configs (>9 marks, elapsed start) are <b>allowed, then rejected</b> by a modal after Start.</div>
+        <div class="after-c">Controls are <b>clamped to the valid range</b>; the alert is deleted because it can never trigger.</div>
+      </div>
+      <div class="lrow">
+        <div class="before-c"><b>Two competing buttons</b> — “Start Now” and “Schedule Start” — split the commit.</div>
+        <div class="after-c">A <b>Now/Later toggle + one adaptive button</b> that relabels itself to the actual outcome.</div>
+      </div>
+      <div class="lrow">
+        <div class="before-c">The interval/window/marks relationship is <b>opaque until it errors</b> in red text.</div>
+        <div class="after-c">A <b>live tick-mark rail</b> renders every cue as you compose — the rule is on screen.</div>
+      </div>
+      <div class="lrow">
+        <div class="before-c">A launched timer is a <b>dense text row</b>; you can only Stop or Reset it.</div>
+        <div class="after-c">Running timers carry the <b>same rail and an inline Adjust</b> — legible and editable.</div>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <span>Tickle · flow-redesign.html</span>
+    <span>Faithful macOS dark-mode · system-ui · no external resources</span>
+    <span>Drag the composer sliders — the rail is live</span>
+  </footer>
+</div>
+
+<script>
+(function(){
+  "use strict";
+  var UNIT = {sec:1, min:60, hr:3600};
+  var MAXMARKS = 9;
+
+  var state = {
+    intVal:5, intUnit:"min",
+    winVal:45, winUnit:"min",
+    mode:"now", startLabel:"11:48 PM"
+  };
+
+  var $ = function(id){return document.getElementById(id);};
+  var intSlider=$("intSlider"), winSlider=$("winSlider"),
+      intValEl=$("intVal"), winValEl=$("winVal"),
+      rail=$("rail"), railTitle=$("railTitle"), railRange=$("railRange"),
+      capNote=$("capNote"), startBtn=$("startBtn"),
+      startSeg=$("startSeg"), startTimeEl=$("startTime"), mbCount=$("mbCount");
+
+  function fmtDur(sec){
+    if(sec<60) return sec+" sec";
+    if(sec<3600) return (sec%60===0? (sec/60)+" min" : (sec/60).toFixed(1)+" min");
+    var h=Math.floor(sec/3600), m=Math.round((sec%3600)/60);
+    return m===0? h+" hr" : h+"h"+m+"m";
+  }
+  function intSec(){return state.intVal*UNIT[state.intUnit];}
+  function winSec(){return state.winVal*UNIT[state.winUnit];}
+
+  // window slider ceiling = 9 * interval, expressed in the window's unit — VALID BY CONSTRUCTION
+  function clampWindow(){
+    var maxWinSec = MAXMARKS * intSec();
+    var maxWinVal = Math.max(1, Math.floor(maxWinSec / UNIT[state.winUnit]));
+    winSlider.max = maxWinVal;
+    if(state.winVal > maxWinVal){ state.winVal = maxWinVal; }
+    winSlider.value = state.winVal;
+  }
+
+  function marks(){ return Math.max(1, Math.min(MAXMARKS, Math.floor(winSec()/intSec()))); }
+
+  function renderRail(el, m, ws, is){
+    el.innerHTML = "";
+    var axis=document.createElement("div"); axis.className="axis"; el.appendChild(axis);
+    var maxH = 44;
+    for(var i=1;i<=m;i++){
+      var x = Math.min(100, (i*is/ws)*100);
+      var wrap=document.createElement("div"); wrap.className="mark"; wrap.style.left=x+"%";
+      var bar=document.createElement("div"); bar.className="bar";
+      bar.style.height = (10 + (i/m)*maxH) + "px";
+      var cnt=document.createElement("div"); cnt.className="cnt"; cnt.textContent=i;
+      wrap.appendChild(bar); wrap.appendChild(cnt); el.appendChild(wrap);
+    }
+    var fin=document.createElement("div"); fin.className="finish";
+    var flag=document.createElement("div"); flag.className="flag";
+    var lbl=document.createElement("div"); lbl.className="lbl"; lbl.textContent="⑂ chime";
+    fin.appendChild(flag); fin.appendChild(lbl); el.appendChild(fin);
+    // static playhead a bit past the 5th-of-window for atmosphere on the main rail
+    if(el===rail){
+      var ph=document.createElement("div"); ph.className="playhead"; ph.style.left="0%"; el.appendChild(ph);
+      // gentle drift
+      var t=0;
+      if(el._anim) cancelAnimationFrame(el._anim);
+      (function loop(){
+        t=(t+0.12)%100; ph.style.left=t+"%";
+        el._anim=requestAnimationFrame(loop);
+      })();
+    }
+  }
+
+  function updateSliderFill(sl){
+    var pct = ((sl.value - sl.min)/(sl.max - sl.min))*100;
+    sl.style.setProperty("--pct", pct+"%");
+  }
+
+  function render(){
+    clampWindow();
+    var m = marks(), ws=winSec(), is=intSec();
+    intValEl.textContent = fmtDur(is);
+    winValEl.textContent = fmtDur(ws);
+    railTitle.textContent = m + (m===1? " cue":" escalating cues");
+    railRange.textContent = "0 → " + fmtDur(ws);
+    renderRail(rail, m, ws, is);
+    updateSliderFill(intSlider); updateSliderFill(winSlider);
+    // ceiling hint lights when you're pinned at the max
+    var atCeiling = (Math.floor(ws/is) >= MAXMARKS) && (state.winVal == Number(winSlider.max));
+    capNote.classList.toggle("hit", atCeiling);
+    // adaptive commit
+    if(state.mode==="now"){
+      startTimeEl.classList.remove("show");
+      startBtn.textContent = "Start now";
+    }else{
+      startTimeEl.classList.add("show");
+      startBtn.textContent = "Start at " + state.startLabel.replace(/\s?[AP]M$/,"");
+    }
+    mbCount.textContent = "7/"+m;
+  }
+
+  intSlider.addEventListener("input", function(){ state.intVal=Number(intSlider.value); render(); });
+  winSlider.addEventListener("input", function(){ state.winVal=Number(winSlider.value); render(); });
+
+  function bindUnit(segId, key){
+    var seg=$(segId);
+    seg.addEventListener("click", function(e){
+      var b=e.target.closest("button"); if(!b) return;
+      [].forEach.call(seg.querySelectorAll("button"), function(x){x.classList.remove("on");});
+      b.classList.add("on");
+      state[key]=b.dataset.u;
+      // keep interval slider range sensible per unit
+      if(key==="intUnit"){ intSlider.max = state.intUnit==="hr"?12:60; if(state.intVal>intSlider.max){state.intVal=intSlider.max;} intSlider.value=state.intVal; }
+      render();
+    });
+  }
+  bindUnit("intUnit","intUnit");
+  bindUnit("winUnit","winUnit");
+
+  startSeg.addEventListener("click", function(e){
+    var b=e.target.closest("button"); if(!b) return;
+    [].forEach.call(startSeg.querySelectorAll("button"), function(x){x.classList.remove("on");});
+    b.classList.add("on"); state.mode=b.dataset.m; render();
+  });
+
+  startBtn.addEventListener("click", function(){
+    var m=marks(), ws=winSec(), is=intSec();
+    var list=$("activeList");
+    var card=document.createElement("div"); card.className="tcard";
+    card.style.animation="rise .4s ease both";
+    var when = state.mode==="now" ? "0/"+m : "Starts "+state.startLabel;
+    card.innerHTML =
+      '<div class="tcard-top"><span class="dot'+(state.mode==="now"?"":" sched")+'"></span>'+
+      '<span class="prog"'+(state.mode==="now"?"":' style="font-weight:500;color:var(--os-text-2)"')+'>'+when+'</span>'+
+      '<span class="tcard-actions"><button class="chip-btn">Adjust</button><button class="chip-btn">Stop</button></span></div>'+
+      '<div class="tcard-sub">Every '+fmtDur(is)+' · '+fmtDur(ws)+' window · Purr</div>';
+    list.insertBefore(card, list.firstChild);
+    startBtn.textContent = "Added ✓";
+    setTimeout(render, 900);
+  });
+
+  // secondary demo rail in the flow storyboard (static, 7 cues over 42 min)
+  var railDemo=$("railDemo");
+  if(railDemo){ renderRail(railDemo, 7, 42*60, 6*60); }
+
+  render();
+})();
+</script>
