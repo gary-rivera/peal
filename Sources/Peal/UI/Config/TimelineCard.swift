@@ -1,0 +1,189 @@
+import AppKit
+
+// THE CENTERPIECE — live tick-pattern timeline (.timeline-card in the mockup).
+final class TimelineCard: FlippedView {
+    var intervalSeconds: Double = 6
+    var windowSeconds: Double = 60
+    var isPerpetual = false
+    var isValid: Bool {
+        let m = marks
+        return m > 0 && m <= 9
+    }
+    private var marks: Int {
+        isPerpetual ? TickTimer.marksPerHour(interval: intervalSeconds)
+                    : (intervalSeconds > 0 ? Int(windowSeconds / intervalSeconds) : 0)
+    }
+    // Perpetuity previews one clock hour of the endless pattern.
+    private var effectiveWindow: Double { isPerpetual ? 3600 : windowSeconds }
+
+    // The note sentence carries the explanation; the legend is one quiet line.
+    private static let legendTexts = [
+        "Each mark is one interval — bar height = ticks played; the bell ends the window.",
+        "Each mark is one interval — bar height = ticks played; the count resets on the hour.",
+    ]
+    private var legendText: String { Self.legendTexts[isPerpetual ? 1 : 0] }
+
+    // End-cap glyph as a brand-tinted SF Symbol (emoji can't take the accent color).
+    private static func tintedSymbol(_ name: String) -> NSImage? {
+        guard let base = NSImage(systemSymbolName: name, accessibilityDescription: name)?
+            .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 12, weight: .semibold))
+        else { return nil }
+        return NSImage(size: base.size, flipped: false) { rect in
+            base.draw(in: rect)
+            Theme.accentSoft.set()
+            rect.fill(using: .sourceAtop)
+            return true
+        }
+    }
+    private static let bellImage = tintedSymbol("bell.fill")          // window's end chime
+    private static let repeatImage = tintedSymbol("arrow.clockwise")  // perpetuity's hourly reset
+
+    static func height(forWidth width: CGFloat) -> CGFloat {
+        // 18 pad + 16 head + 22 gap + 74 track + 26 numbers + 34 note + legend + 14 pad
+        let lines = legendLineCount(width: width)
+        return 18 + 16 + 22 + 74 + 26 + 34 + 2 + CGFloat(lines) * 15 + 14
+    }
+    private static func legendLineCount(width: CGFloat) -> Int {
+        // Size for whichever legend variant wraps to more lines.
+        let font = NSFont.systemFont(ofSize: 11)
+        return legendTexts.map { text in
+            let w = ceil(NSAttributedString(string: text, attributes: [.font: font]).size().width)
+            return max(1, Int(ceil(w / (width - 36))))
+        }.max()!
+    }
+
+    func update(interval: Double, window: Double, perpetual: Bool) {
+        intervalSeconds = interval
+        windowSeconds = window
+        isPerpetual = perpetual
+        needsDisplay = true
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        let r = bounds
+        let m = marks
+        let over = m > 9
+        let bad = over || m == 0
+
+        // card body + tint + border
+        let card = roundedPath(r.insetBy(dx: 0.5, dy: 0.5), 14)
+        (bad ? Theme.cardBad : Theme.cardBG).setFill(); card.fill()
+        NSGraphicsContext.current?.saveGraphicsState()
+        card.addClip()
+        let tint = bad ? Theme.red.withAlphaComponent(0.14) : Theme.accent.withAlphaComponent(0.10)
+        NSGradient(starting: tint, ending: .clear)?.draw(
+            fromCenter: NSPoint(x: 0, y: 0), radius: 0,
+            toCenter: NSPoint(x: 0, y: 0), radius: r.width * 0.72, options: [])
+        NSGraphicsContext.current?.restoreGraphicsState()
+        (bad ? Theme.red.withAlphaComponent(0.45) : Theme.line2).setStroke()
+        card.lineWidth = 1
+        card.stroke()
+
+        // header: quiet label left, marks-count chip right
+        Theme.caption("Interval time preview").draw(at: NSPoint(x: 18, y: 16))
+        let countText: String
+        if over { countText = "\(m) marks — max 9" }
+        else if m == 0 { countText = "no marks" }
+        else { countText = "\(m) mark" + (m == 1 ? "" : "s") }
+        let count = NSAttributedString(string: countText, attributes: [
+            .font: NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .semibold),
+            .foregroundColor: bad ? Theme.redSoft : Theme.accentSoft])
+        let csz = count.size()
+        let pill = NSRect(x: r.width - 18 - csz.width - 18, y: 15,
+                          width: csz.width + 18, height: 19)
+        let pillTint = bad ? Theme.red : Theme.accent
+        pillTint.withAlphaComponent(0.14).setFill()
+        roundedPath(pill, 9.5).fill()
+        pillTint.withAlphaComponent(0.28).setStroke()
+        roundedPath(pill.insetBy(dx: 0.5, dy: 0.5), 9.5).stroke()
+        count.draw(centeredIn: pill)
+
+        // track
+        let x0 = 18.0 + 6, x1 = r.width - 18 - 6
+        let baseY = 18 + 16 + 22 + 74.0
+        Theme.line2.setFill()
+        NSRect(x: x0, y: baseY - 2, width: x1 - x0, height: 2).fill()
+        NSRect(x: x0, y: baseY - 9, width: 2, height: 16).fill()   // start cap
+        NSRect(x: x1 - 2, y: baseY - 9, width: 2, height: 16).fill() // end cap
+
+        // marks: stem + escalating bar stack + number
+        if m > 0 {
+            let shown = min(m, 12)
+            let numFont = NSFont.monospacedSystemFont(ofSize: 9, weight: .regular)
+            for i in 1...shown {
+                let frac = min(1, Double(i) * intervalSeconds / effectiveWindow)
+                let cx = x0 + (x1 - x0) * CGFloat(frac)
+                Theme.line2.setFill()
+                NSRect(x: cx - 1, y: baseY - 2 - 8, width: 2, height: 8).fill()
+                let bars = i <= 9 ? i : 1
+                let color = i <= 9 ? Theme.accent : Theme.red
+                NSGraphicsContext.current?.saveGraphicsState()
+                let glow = NSShadow()
+                glow.shadowColor = color.withAlphaComponent(0.45)
+                glow.shadowBlurRadius = 6
+                glow.set()
+                var by = baseY - 2 - 8 - 6 - 5
+                for _ in 0..<bars {
+                    color.setFill()
+                    roundedPath(NSRect(x: cx - 6, y: by, width: 12, height: 5), 2).fill()
+                    by -= 7
+                }
+                NSGraphicsContext.current?.restoreGraphicsState()
+                let no = NSAttributedString(string: "\(i)", attributes: [
+                    .font: numFont, .foregroundColor: Theme.ink3])
+                let nsz = no.size()
+                no.draw(at: NSPoint(x: cx - nsz.width / 2, y: baseY + 6))
+            }
+        }
+        // end cap: the window's chime bell, or perpetuity's hourly reset arrow
+        if let glyph = isPerpetual ? Self.repeatImage : Self.bellImage {
+            let gsz = glyph.size
+            glyph.draw(in: NSRect(x: x1 - gsz.width / 2, y: baseY - 4 - gsz.height,
+                                  width: gsz.width, height: gsz.height),
+                       from: .zero, operation: .sourceOver, fraction: 1,
+                       respectFlipped: true, hints: nil)
+        }
+
+        // note
+        var segments: [(String, Bool)]
+        let baseColor: NSColor, boldColor: NSColor
+        if over {
+            baseColor = Theme.redSoft; boldColor = Theme.ink
+            segments = [(isPerpetual ? "Each hour fits " : "This window fits ", false),
+                        ("\(m) marks", true),
+                        (" — Peal plays at most 9. Lengthen the interval", false),
+                        (isPerpetual ? "." : " or shorten the window.", false)]
+        } else if m == 0 {
+            baseColor = Theme.redSoft; boldColor = Theme.ink
+            segments = [(isPerpetual
+                ? "The interval is an hour or longer — no ticks would play."
+                : "The interval is longer than the window — no ticks would play.", false)]
+        } else if isPerpetual {
+            baseColor = Theme.ink2; boldColor = Theme.ink
+            segments = [("A tick every ", false), (shortDuration(intervalSeconds), true),
+                        (" past the hour: bursts grow ", false), ("1 → \(m)", true),
+                        (", resetting with a bong each hour, forever.", false)]
+        } else {
+            baseColor = Theme.ink2; boldColor = Theme.ink
+            segments = [("A tick every ", false), (shortDuration(intervalSeconds), true),
+                        (" across ", false), (shortDuration(windowSeconds), true),
+                        (": bursts grow ", false), ("1 → \(m)", true),
+                        (", then a double chime.", false)]
+        }
+        let note = NSMutableAttributedString()
+        for (text, bold) in segments {
+            note.append(NSAttributedString(string: text, attributes: [
+                .font: NSFont.systemFont(ofSize: 12.5, weight: bold ? .semibold : .regular),
+                .foregroundColor: bold ? boldColor : baseColor]))
+        }
+        let noteY = baseY + 26
+        note.draw(in: NSRect(x: 18, y: noteY, width: r.width - 36, height: 34))
+
+        // legend: one quiet line under the note
+        let legendLines = Self.legendLineCount(width: r.width)
+        NSAttributedString(string: legendText, attributes: [
+            .font: NSFont.systemFont(ofSize: 11), .foregroundColor: Theme.ink3])
+            .draw(in: NSRect(x: 18, y: noteY + 34 + 2,
+                             width: r.width - 36, height: CGFloat(legendLines) * 15))
+    }
+}

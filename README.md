@@ -25,20 +25,28 @@ timers are done.
 ## Build & install
 
 ```sh
-./build.sh    # compiles Peal.swift, assembles Peal.app, installs to /Applications
+./build.sh    # swift build -c release, assembles Peal.app, installs to /Applications
 ```
 
-Requires Xcode command line tools (`swiftc`). Targets macOS 13+.
+Requires Xcode command line tools (Swift 6 toolchain). Targets macOS 13+.
 
 ## Dev loop (no bundle)
 
 ```sh
-swiftc -O Peal.swift -o peal && ./peal    # quit from the menu, or: pkill peal
+swift run Peal    # quit from the menu, or: pkill Peal
 ```
 
 ## Layout
 
-- `Peal.swift` — the whole app (AppKit, single file)
+- `Package.swift` — Swift package; one executable target, Swift 6 language mode
+- `Sources/Peal/`
+  - `main.swift` — entry point (app overview lives in its header comment)
+  - `App/` — `AppDelegate`, legacy-defaults migration, menu icon suppression
+  - `Model/` — `TickTimer` and duration formatting
+  - `UI/Theme/` — design tokens, `FlippedView`, drawing helpers
+  - `UI/Controls/` — config panel controls, one per file
+  - `UI/Config/` — `TimelineCard` (interval preview)
+  - `UI/Menu/` — menu row views
 - `build.sh` — build + install script; also generates Info.plist
 - `assets/` — app icon (`Peal.icns`, compiled from `Peal.iconset/`,
   source art `Peal.png`). The menu bar uses the SF Symbols bell

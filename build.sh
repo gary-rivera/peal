@@ -1,5 +1,5 @@
 #!/bin/zsh
-# Builds Peal.swift into Peal.app and installs it to /Applications
+# Builds the Peal Swift package into Peal.app and installs it to /Applications
 # (falls back to ~/Applications if /Applications isn't writable).
 set -e
 cd "$(dirname "$0")"
@@ -8,7 +8,8 @@ APP=Peal.app
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS"
 
-swiftc -O Peal.swift -o "$APP/Contents/MacOS/Peal"
+swift build -c release --product Peal
+cp "$(swift build -c release --show-bin-path)/Peal" "$APP/Contents/MacOS/Peal"
 
 mkdir -p "$APP/Contents/Resources"
 cp assets/Peal.icns "$APP/Contents/Resources/"
