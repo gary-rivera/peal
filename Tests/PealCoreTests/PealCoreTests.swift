@@ -138,6 +138,20 @@ private func perpetual(every interval: Double) -> TimerConfig {
         #expect(Format.duration(7200) == "2h")
     }
 
+    // A picked time that has already passed today means tomorrow.
+    @Test func scheduledTimeRollsOverToTomorrow() {
+        let now = topOfHour + minutes(30) + 20          // hh:30:20
+        let earlier = topOfHour + minutes(10)           // hh:10
+        let later = topOfHour + minutes(45)             // hh:45
+        let thisMinute = topOfHour + minutes(30)        // hh:30
+        #expect(utc.nextOccurrence(ofHourAndMinuteIn: later, after: now) == later)
+        #expect(utc.nextOccurrence(ofHourAndMinuteIn: thisMinute, after: now) == thisMinute)
+        #expect(utc.nextOccurrence(ofHourAndMinuteIn: earlier, after: now) == earlier + 86_400)
+        // The picker carries its own (possibly stale) date; only hour and minute count.
+        let staleDay = earlier - 3 * 86_400
+        #expect(utc.nextOccurrence(ofHourAndMinuteIn: staleDay, after: now) == earlier + 86_400)
+    }
+
     @Test func roundedUpToMinute() {
         #expect(topOfHour.roundedUpToMinute == topOfHour)
         #expect((topOfHour + 1).roundedUpToMinute == topOfHour + 60)

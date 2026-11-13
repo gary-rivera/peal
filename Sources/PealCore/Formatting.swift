@@ -23,10 +23,3 @@ package enum Format {
         return m == 0 ? "\(h)h" : "\(h)h\(m)m"
     }
 }
-
-extension Date {
-    /// 11:30:01 → 11:31; 11:30:00 stays 11:30.
-    package var roundedUpToMinute: Date {
-        Date(timeIntervalSinceReferenceDate: (timeIntervalSinceReferenceDate / 60).rounded(.up) * 60)
-    }
-}

@@ -126,14 +126,9 @@ final class ConfigPanelController: NSObject {
 
     @objc private func startPickerEdited() { startPickerTouched = true }
 
-    /// Today at the picker's hour and minute.
+    /// The picker's hour and minute: today, or tomorrow if that's already passed.
     private func scheduledStart() -> Date {
-        let cal = Calendar.current
-        let hm = cal.dateComponents([.hour, .minute], from: startPicker.dateValue)
-        var comps = cal.dateComponents([.year, .month, .day], from: Date())
-        comps.hour = hm.hour
-        comps.minute = hm.minute
-        return cal.date(from: comps) ?? startPicker.dateValue
+        Calendar.current.nextOccurrence(ofHourAndMinuteIn: startPicker.dateValue, after: Date())
     }
 
     // MARK: - Layout
