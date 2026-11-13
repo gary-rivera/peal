@@ -7,6 +7,17 @@ Built for keeping track of elapsed time in interviews without watching a
 clock. Multiple timers can run or be scheduled at once; settings persist
 via UserDefaults (`com.garyrivera.tickle`).
 
+Perpetuity mode drops the window and ticks forever: marks anchor to the
+clock hour (with a 10-minute interval, one tick at :10, two at :20, … five
+at :50), a "Submarine" bong at the top of each hour resets the count, and
+the timer runs until stopped by hand. Start one instantly from the menu's "Start in
+perpetuity" item, or toggle the Timed/Perpetuity segment on the config
+panel's window row.
+
+A global tick-volume slider lives in both the menu (for quick adjustment
+while timers run) and the New Timer panel; it scales every Tickle sound
+and releasing it plays one tick as a loudness preview.
+
 Menu bar shows the featured timer's progress as marks-elapsed/total-marks
 (e.g. `3/9`), `in 4:32` for the next scheduled timer, or `✓` when all
 timers are done.
@@ -36,8 +47,6 @@ back to the SF Symbols metronome — expected.
   source art `Tickle.png`) and the menu bar template image (`MenuIcon.png`)
 - `mockups/` — HTML design mockups the menu and config-panel UI were
   built from (referenced from the Tickle.swift header comment)
-- `tick.sh` — the original shell-script version (afplay loop); kept for
-  reference and terminal use
 
 To regenerate the icns after editing the iconset:
 `iconutil -c icns assets/Tickle.iconset -o assets/Tickle.icns`
