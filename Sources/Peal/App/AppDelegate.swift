@@ -1,10 +1,8 @@
 import AppKit
+import PealCore
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    static let unitNames = ["sec", "min", "hr"]
-    static let unitSeconds: [Double] = [1, 60, 3600]
-
     var statusItem: NSStatusItem!
     var timers: [TickTimer] = []
     var rowViews: [TimerRowView] = []
@@ -13,18 +11,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // Hold references so sounds aren't deallocated mid-playback.
     var sounds: [NSSound] = []
 
-    // Defaults for the next timer (persisted).
-    var intervalValue: Double = UserDefaults.standard.object(forKey: "intervalValue") as? Double ?? 10
-    var intervalUnitIndex: Int = UserDefaults.standard.object(forKey: "intervalUnit") as? Int ?? 1
-    var intervalSeconds: Double { intervalValue * Self.unitSeconds[intervalUnitIndex] }
-    var windowValue: Double = UserDefaults.standard.object(forKey: "windowValue") as? Double
-        ?? UserDefaults.standard.object(forKey: "windowMinutes") as? Double ?? 45
-    var windowUnitIndex: Int = UserDefaults.standard.object(forKey: "windowUnit") as? Int ?? 1
-    var windowSeconds: Double { windowValue * Self.unitSeconds[windowUnitIndex] }
-    var tickSound: String = UserDefaults.standard.string(forKey: "tickSound") ?? "Tink"
-    var perpetuity: Bool = UserDefaults.standard.bool(forKey: "perpetuity")
-    // Global multiplier over every play() call's base volume (1 = full).
-    var tickVolume: Double = UserDefaults.standard.object(forKey: "tickVolume") as? Double ?? 1
+    // Defaults for the next timer; every change persists.
+    var settings = TimerSettings(defaults: .standard) {
+        didSet { settings.save(to: .standard) }
+    }
 
     var configPanel: NSPanel?
     var intervalStepper: StepperControl!
@@ -65,7 +55,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // One character per timer's section; when it changes, the menu needs rebuilding.
     func sectionSignature() -> String {
-        timers.map { $0.isActive ? "a" : $0.isScheduled ? "u" : "f" }.joined()
+        let now = Date()
+        return timers.map { t in
+            switch t.phase(at: now) {
+            case .running: "a"
+            case .scheduled: "u"
+            case .finished, .stopped: "f"
+            }
+        }.joined()
     }
 
     func rebuildMenu() {
@@ -75,7 +72,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(makeItem("Start timer", #selector(openConfig), ","))
         menu.addItem(makeItem("Start in perpetuity", #selector(startPerpetuity), "p"))
         menu.addItem(makeItem("Play sample ticks", #selector(testTicks), "t"))
-        let volumeRow = VolumeSlider(title: "Tick volume", value: tickVolume,
+        let volumeRow = VolumeSlider(title: "Tick volume", value: settings.volume,
                                      width: Theme.menuWidth, insetX: 16)
         volumeRow.onChange = { [weak self] v in self?.setTickVolume(v) }
         volumeRow.onCommit = { [weak self] in self?.auditionVolume() }
@@ -96,8 +93,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             for timer in list {
                 let row = TimerRowView(timer: timer)
                 row.onStop = { [weak self] in
-                    guard !timer.isStopped else { return }
-                    timer.stoppedAt = Date()
+                    timer.stop(at: Date())
                     self?.update()
                 }
                 row.onReset = { [weak self] in
@@ -118,12 +114,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             none.isEnabled = false
             menu.addItem(none)
         } else {
-            addSection("Ongoing", dot: Theme.sysGreen, timers.filter { $0.isActive })
-            addSection("Upcoming", dot: Theme.sysOrange, timers.filter { $0.isScheduled })
+            let now = Date()
+            addSection("Ongoing", dot: Theme.sysGreen, timers.filter { $0.phase(at: now) == .running })
+            addSection("Upcoming", dot: Theme.sysOrange, timers.filter { $0.phase(at: now) == .scheduled })
             addSection("Finished", dot: Theme.sysGray, timers.filter { $0.isStopped })
             let foot = FootbarView()
             foot.onStopAll = { [weak self] in self?.stopAllTimers() }
-            foot.stopEnabled = timers.contains { $0.isActive }
+            foot.stopEnabled = timers.contains { $0.phase(at: now) == .running }
             let footItem = NSMenuItem()
             footItem.view = foot
             menu.addItem(footItem)
@@ -138,45 +135,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Timer core
 
-    // 11:30:01 → 11:31; 11:30:00 stays 11:30.
-    func ceilToMinute(_ date: Date) -> Date {
-        Date(timeIntervalSinceReferenceDate: (date.timeIntervalSinceReferenceDate / 60).rounded(.up) * 60)
-    }
-
-    func advance(_ t: TickTimer) {
-        guard !t.isStopped else { return }
-        let elapsed = Date().timeIntervalSince(t.start)
-        guard elapsed >= 0 else { return }
-        if !t.startAnnounced {
-            t.startAnnounced = true
-            play("Pop", times: 1, gap: 0)
-        }
-        // Window end: finish the timer — the Glass chime is the stop signal.
-        if t.windowSeconds > 0, elapsed >= t.windowSeconds {
-            t.stoppedAt = t.start.addingTimeInterval(t.windowSeconds)
-            play("Glass", times: 2, gap: 0.6)
-            return
-        }
-        let mark = t.isPerpetual ? TickTimer.hourMark(at: Date(), interval: t.intervalSeconds)
-                                 : Int(elapsed / t.intervalSeconds)
-        if mark > t.lastMark {
-            t.lastMark = mark
-            play(t.sound, times: mark, gap: 0.2)
-        } else if mark < t.lastMark {
-            // Top of the hour (perpetuity only — window marks never decrease):
-            // a Submarine bong marks the reset, then the count restarts at 1.
-            t.lastMark = mark
-            play("Submarine", times: 1, gap: 0)
+    // Each timer event's sound: Pop at a scheduled start, N ticks at the Nth
+    // mark, a Submarine bong at perpetuity's top of the hour, and a double
+    // Glass chime as the window-end stop signal.
+    func play(_ event: TickTimer.Event, of timer: TickTimer) {
+        switch event {
+        case .started: play("Pop", times: 1, gap: 0)
+        case .ticks(let count): play(timer.config.sound, times: count, gap: 0.2)
+        case .hourReset: play("Submarine", times: 1, gap: 0)
+        case .finished: play("Glass", times: 2, gap: 0.6)
         }
     }
 
     func update() {
-        for t in timers { advance(t) }
+        let now = Date()
+        for t in timers {
+            for event in t.advance(now: now) { play(event, of: t) }
+        }
 
         // A timer changed section (upcoming → ongoing → finished): regroup.
         if sectionSignature() != menuSignature { rebuildMenu() }
 
-        let anyActive = timers.contains { $0.isActive }
+        let anyActive = timers.contains { $0.phase(at: now) == .running }
         let icon = NSImage(systemSymbolName: anyActive ? "bell.fill" : "bell",
                            accessibilityDescription: "Peal")
         icon?.isTemplate = true
@@ -189,54 +169,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Untouched "Start at" tracks the clock, rounded up to the next minute.
         if let panel = configPanel, panel.isVisible, !startPickerTouched {
-            startPicker.dateValue = ceilToMinute(Date())
+            startPicker.dateValue = now.roundedUpToMinute
         }
     }
 
     @objc func startPickerEdited() { startPickerTouched = true }
 
+    // Timers are kept sorted by start, so the first match is the earliest.
     func statusTitle() -> String {
+        let now = Date()
         let extras = timers.count > 1 ? " +\(timers.count - 1)" : ""
-        if let t = timers.filter({ $0.isActive }).min(by: { $0.start < $1.start }) {
-            let text = t.totalMarks > 0 ? "\(t.marksElapsed)/\(t.totalMarks)" : clock(Int(t.elapsed))
+        if let t = timers.first(where: { $0.phase(at: now) == .running }) {
+            let marks = t.config.markCount
+            let text = marks > 0 ? "\(t.marksElapsed(at: now))/\(marks)" : Format.clock(t.elapsed(at: now))
             return text + extras
         }
-        if let next = timers.filter({ $0.isScheduled }).min(by: { $0.start < $1.start }) {
-            return "in " + clock(Int((-next.elapsed).rounded(.up))) + extras
+        if let next = timers.first(where: { $0.phase(at: now) == .scheduled }) {
+            return "in " + Format.countdown(fromElapsed: next.elapsed(at: now)) + extras
         }
         return timers.isEmpty ? "" : "✓"
     }
 
-    func validationError(startingAt start: Date, perpetual: Bool) -> String? {
-        // Perpetuity never elapses; only the interval needs to fit the hour.
-        if perpetual {
-            let marks = TickTimer.marksPerHour(interval: intervalSeconds)
-            if marks == 0 {
-                return "The interval is an hour or longer — no ticks would play. Shorten the interval."
-            }
-            if marks > 9 {
-                return "Each hour fits \(marks) tick marks — the most Peal supports is 9. Lengthen the interval."
-            }
-            return nil
-        }
-        // A past start is fine while its window is still in progress — the timer
-        // backdates and resumes at the next interval mark. Only reject once the
-        // whole window has already elapsed.
-        if Date().timeIntervalSince(start) >= windowSeconds {
-            return "That start time's window has already fully elapsed. Pick a later time."
-        }
-        let marks = Int(windowSeconds / intervalSeconds)
-        if marks > 9 {
-            return "This window fits \(marks) tick marks — the most Peal supports is 9. Lengthen the interval or shorten the window."
-        }
-        return nil
-    }
-
     func addTimer(startingAt start: Date, perpetual: Bool) {
-        if let message = validationError(startingAt: start, perpetual: perpetual) {
+        let config = settings.config(perpetual: perpetual)
+        if let issue = config.issue(startingAt: start, now: Date()) {
             let alert = NSAlert()
             alert.messageText = "Can't start timer"
-            alert.informativeText = message
+            alert.informativeText = issue.message(for: config.mode)
             alert.alertStyle = .warning
             if let panel = configPanel, panel.isVisible {
                 alert.beginSheetModal(for: panel)
@@ -245,45 +204,41 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             return
         }
-        timers.append(TickTimer(start: start,
-                                intervalSeconds: intervalSeconds,
-                                windowSeconds: perpetual ? 0 : windowSeconds,
-                                sound: tickSound,
-                                isPerpetual: perpetual))
+        timers.append(TickTimer(start: start, config: config))
         timers.sort { $0.start < $1.start }
         rebuildMenu()
         update()
         configPanel?.orderOut(nil)
     }
 
-    // Menu shortcut: an endless clock-anchored timer with the current interval
-    // and sound, no config panel — and no change to the panel's saved default.
+    // Menu shortcut: an endless clock-anchored timer with the saved interval
+    // and sound, skipping the config panel. The saved Timed/Perpetuity choice
+    // is left as is.
     @objc func startPerpetuity() { addTimer(startingAt: Date(), perpetual: true) }
 
     @objc func stopAllTimers() {
         let now = Date()
-        for t in timers where t.isActive { t.stoppedAt = now }
+        for t in timers where t.phase(at: now) == .running { t.stop(at: now) }
         update()
     }
 
-    @objc func testTicks() { play(tickSound, times: 3, gap: 0.2) }
+    @objc func testTicks() { play(settings.sound, times: 3, gap: 0.2) }
 
     // One knob, two sliders: persist and keep menu + panel in step.
     func setTickVolume(_ v: Double) {
-        tickVolume = v
-        UserDefaults.standard.set(v, forKey: "tickVolume")
+        settings.volume = v
         menuVolumeSlider?.value = v
         panelVolumeSlider?.value = v
     }
     // A single tick at the new level, so releasing the slider answers "how loud?".
-    func auditionVolume() { play(tickSound, times: 1, gap: 0) }
+    func auditionVolume() { play(settings.sound, times: 1, gap: 0) }
 
     static func availableSounds() -> [String] {
         let names = (try? FileManager.default.contentsOfDirectory(atPath: "/System/Library/Sounds"))?
             .filter { $0.hasSuffix(".aiff") }
             .map { String($0.dropLast(5)) }
             .sorted() ?? []
-        return names.isEmpty ? ["Tink"] : names
+        return names.isEmpty ? [TimerSettings.defaultSound] : names
     }
 
     // The tick-volume slider IS the output level: 100% plays samples at full
@@ -294,7 +249,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             DispatchQueue.main.asyncAfter(deadline: .now() + Double(i) * gap) { [weak self] in
                 guard let self else { return }
                 if let sound = NSSound(contentsOfFile: "/System/Library/Sounds/\(name).aiff", byReference: true) {
-                    sound.volume = Float(self.tickVolume)
+                    sound.volume = Float(self.settings.volume)
                     self.sounds.append(sound)
                     sound.play()
                 }
@@ -306,20 +261,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc func openConfig() {
         if configPanel == nil { buildConfigPanel() }
-        intervalStepper.value = max(1, Int(intervalValue))
-        intervalSeg.selected = intervalUnitIndex
-        windowStepper.value = max(1, Int(windowValue))
-        windowSeg.selected = windowUnitIndex
-        perpetuitySeg.selected = perpetuity ? 1 : 0
-        windowStepper.isHidden = perpetuity
-        windowSeg.isHidden = perpetuity
-        soundPopup.select(tickSound)
-        panelVolumeSlider.value = tickVolume
+        intervalStepper.value = max(1, Int(settings.intervalValue))
+        intervalSeg.selected = settings.intervalUnit.rawValue
+        windowStepper.value = max(1, Int(settings.windowValue))
+        windowSeg.selected = settings.windowUnit.rawValue
+        perpetuitySeg.selected = settings.isPerpetual ? 1 : 0
+        windowStepper.isHidden = settings.isPerpetual
+        windowSeg.isHidden = settings.isPerpetual
+        soundPopup.select(settings.sound)
+        panelVolumeSlider.value = settings.volume
         whenSeg.selected = 0
         startPicker.isHidden = true
         goButton.title = "Start timer"
         startPickerTouched = false
-        startPicker.dateValue = ceilToMinute(Date())
+        startPicker.dateValue = Date().roundedUpToMinute
         renderTimeline()
         NSApp.activate(ignoringOtherApps: true)
         configPanel!.center()
@@ -338,57 +293,51 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         var y: CGFloat = 22
 
-        // One caption + stepper + unit row; changes persist to UserDefaults and re-render the timeline.
-        func valueUnitRow(_ caption: String, value: Double, unit: Int,
-                          valueKey: String, valuePath: ReferenceWritableKeyPath<AppDelegate, Double>,
-                          unitKey: String, unitPath: ReferenceWritableKeyPath<AppDelegate, Int>,
+        // One caption + stepper + unit row; changes update settings and re-render the timeline.
+        func valueUnitRow(_ caption: String,
+                          value valuePath: WritableKeyPath<TimerSettings, Double>,
+                          unit unitPath: WritableKeyPath<TimerSettings, TimeUnit>,
                           x: CGFloat = padX)
             -> (StepperControl, SegControl) {
             let cap = capLabel(caption)
             cap.setFrameOrigin(NSPoint(x: padX, y: y)); content.addSubview(cap)
             y += 16 + 7
-            let stepper = StepperControl(value: max(1, Int(value)))
+            let stepper = StepperControl(value: max(1, Int(settings[keyPath: valuePath])))
             stepper.setFrameOrigin(NSPoint(x: x, y: y)); content.addSubview(stepper)
-            let seg = SegControl(items: Self.unitNames, selected: unit)
+            let seg = SegControl(items: TimeUnit.allCases.map(\.label),
+                                 selected: settings[keyPath: unitPath].rawValue)
             seg.setFrameOrigin(NSPoint(x: x + 104 + 12, y: y)); content.addSubview(seg)
             stepper.onChange = { [weak self] v in
-                self?[keyPath: valuePath] = Double(v)
-                UserDefaults.standard.set(Double(v), forKey: valueKey)
+                self?.settings[keyPath: valuePath] = Double(v)
                 self?.renderTimeline()
             }
             seg.onChange = { [weak self] idx in
-                self?[keyPath: unitPath] = idx
-                UserDefaults.standard.set(idx, forKey: unitKey)
+                self?.settings[keyPath: unitPath] = TimeUnit(rawValue: idx) ?? .min
                 self?.renderTimeline()
             }
             return (stepper, seg)
         }
 
         // Tick every
-        (intervalStepper, intervalSeg) = valueUnitRow("Interval", value: intervalValue, unit: intervalUnitIndex,
-                                                      valueKey: "intervalValue", valuePath: \.intervalValue,
-                                                      unitKey: "intervalUnit", unitPath: \.intervalUnitIndex)
+        (intervalStepper, intervalSeg) = valueUnitRow("Interval", value: \.intervalValue, unit: \.intervalUnit)
         y += 28 + 24
 
         // Over a window of — or in perpetuity, ticking to the clock hour forever.
         // The mode segment leads the row; the window controls hide in perpetuity.
-        perpetuitySeg = SegControl(items: ["Timed", "Perpetuity"], selected: perpetuity ? 1 : 0)
-        (windowStepper, windowSeg) = valueUnitRow("Window", value: windowValue, unit: windowUnitIndex,
-                                                  valueKey: "windowValue", valuePath: \.windowValue,
-                                                  unitKey: "windowUnit", unitPath: \.windowUnitIndex,
+        perpetuitySeg = SegControl(items: ["Timed", "Perpetuity"], selected: settings.isPerpetual ? 1 : 0)
+        (windowStepper, windowSeg) = valueUnitRow("Window", value: \.windowValue, unit: \.windowUnit,
                                                   x: padX + perpetuitySeg.frame.width + 12)
         perpetuitySeg.setFrameOrigin(NSPoint(x: padX, y: y))
         content.addSubview(perpetuitySeg)
         perpetuitySeg.onChange = { [weak self] idx in
             guard let self else { return }
-            self.perpetuity = idx == 1
-            UserDefaults.standard.set(self.perpetuity, forKey: "perpetuity")
-            self.windowStepper.isHidden = self.perpetuity
-            self.windowSeg.isHidden = self.perpetuity
+            self.settings.isPerpetual = idx == 1
+            self.windowStepper.isHidden = self.settings.isPerpetual
+            self.windowSeg.isHidden = self.settings.isPerpetual
             self.renderTimeline()
         }
-        windowStepper.isHidden = perpetuity
-        windowSeg.isHidden = perpetuity
+        windowStepper.isHidden = settings.isPerpetual
+        windowSeg.isHidden = settings.isPerpetual
         y += 28 + 12
 
         // Centerpiece timeline
@@ -402,12 +351,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         cap3.setFrameOrigin(NSPoint(x: padX, y: y)); content.addSubview(cap3)
         y += 16 + 7
         let audition: (String) -> Void = { [weak self] name in self?.play(name, times: 1, gap: 0) }
-        soundPopup = SoundPopupControl(sounds: Self.availableSounds(), selected: tickSound)
+        soundPopup = SoundPopupControl(sounds: Self.availableSounds(), selected: settings.sound)
         soundPopup.setFrameOrigin(NSPoint(x: padX, y: y))
         soundPopup.onCommit = { [weak self] name in
             guard let self else { return }
-            self.tickSound = name
-            UserDefaults.standard.set(name, forKey: "tickSound")
+            self.settings.sound = name
             audition(name)  // confirm the pick
         }
         soundPopup.onAudition = audition
@@ -416,7 +364,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         preview.setFrameOrigin(NSPoint(x: padX + 176 + 12, y: y))
         preview.onClick = { [weak self] in
             guard let self else { return }
-            audition(self.tickSound)
+            audition(self.settings.sound)
         }
         content.addSubview(preview)
         y += 28 + 24
@@ -425,7 +373,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let cap4 = capLabel("Tick volume")
         cap4.setFrameOrigin(NSPoint(x: padX, y: y)); content.addSubview(cap4)
         y += 16 + 7
-        panelVolumeSlider = VolumeSlider(value: tickVolume, width: 216)
+        panelVolumeSlider = VolumeSlider(value: settings.volume, width: 216)
         panelVolumeSlider.setFrameOrigin(NSPoint(x: padX, y: y))
         panelVolumeSlider.onChange = { [weak self] v in self?.setTickVolume(v) }
         panelVolumeSlider.onCommit = { [weak self] in self?.auditionVolume() }
@@ -449,7 +397,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         startPicker = NSDatePicker()
         startPicker.datePickerStyle = .textFieldAndStepper
         startPicker.datePickerElements = .hourMinute
-        startPicker.dateValue = ceilToMinute(Date())
+        startPicker.dateValue = Date().roundedUpToMinute
         startPicker.target = self
         startPicker.action = #selector(startPickerEdited)
         startPicker.sizeToFit()
@@ -463,7 +411,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         goButton.setFrameOrigin(NSPoint(x: padX + contentW - goButton.frame.width, y: y))
         goButton.onClick = { [weak self] in
             guard let self else { return }
-            if self.whenSeg.selected == 0 { self.addTimer(startingAt: Date(), perpetual: self.perpetuity) }
+            if self.whenSeg.selected == 0 { self.addTimer(startingAt: Date(), perpetual: self.settings.isPerpetual) }
             else { self.scheduleStart() }
         }
         content.addSubview(goButton)
@@ -486,7 +434,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // Re-render the tick-pattern preview and gate the start button on validity.
     func renderTimeline() {
-        timelineCard.update(interval: intervalSeconds, window: windowSeconds, perpetual: perpetuity)
+        timelineCard.update(settings.config())
         goButton.isEnabled = timelineCard.isValid
     }
 
@@ -497,6 +445,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         comps.hour = hm.hour
         comps.minute = hm.minute
         guard let date = cal.date(from: comps) else { return }
-        addTimer(startingAt: date, perpetual: perpetuity)
+        addTimer(startingAt: date, perpetual: settings.isPerpetual)
     }
 }

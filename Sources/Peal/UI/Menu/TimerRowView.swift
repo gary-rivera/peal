@@ -1,4 +1,5 @@
 import AppKit
+import PealCore
 
 // Rich timer row (.rich in the mockup): accent dot, two text tiers, tick-marked
 // progress track with playhead, and hover-revealed Stop/Reset actions.
@@ -15,16 +16,15 @@ final class TimerRowView: FlippedView {
         return f
     }()
 
-    private enum State { case on, up, fin, stop }
-    private var state: State {
-        if timer.isActive { return .on }
-        if timer.isScheduled { return .up }
-        return timer.isFinished ? .fin : .stop
+    private enum Action {
+        case stop, reset
+        var glyph: String { self == .stop ? "■" : "✕" }
+        var isDanger: Bool { self == .reset }
     }
 
-    // Actions available per state: (glyph, isDanger, handler kind 0=stop 1=reset)
-    private var actions: [(String, Bool, Int)] {
-        state == .on ? [("■", false, 0), ("✕", true, 1)] : [("✕", true, 1)]
+    // Hover actions, right to left: running timers can also be stopped.
+    private var actions: [Action] {
+        timer.phase(at: Date()) == .running ? [.stop, .reset] : [.reset]
     }
 
     init(timer: TickTimer) {
@@ -58,31 +58,42 @@ final class TimerRowView: FlippedView {
         let p = convert(e.locationInWindow, from: nil)
         if let idx = actionRects.firstIndex(where: { $0.contains(p) }) {
             enclosingMenuItem?.menu?.cancelTracking()
-            if actions[idx].2 == 0 { onStop?() } else { onReset?() }
+            switch actions[idx] {
+            case .stop: onStop?()
+            case .reset: onReset?()
+            }
         }
     }
 
     override func draw(_ dirtyRect: NSRect) {
         let t = timer
-        let st = state
+        let now = Date()
+        let st = t.phase(at: now)
+        let elapsed = t.elapsed(at: now)
+        let window = t.config.window ?? 0
+        let markCount = t.config.markCount
         // hover background
         if hovering {
             NSColor(white: 1, alpha: 0.07).setFill()
             roundedPath(bounds.insetBy(dx: 5, dy: 2), 7).fill()
         }
 
-        let accent: NSColor = [State.on: Theme.sysGreen, .up: Theme.sysOrange,
-                               .fin: Theme.sysGray, .stop: Theme.sysRed][st]!
+        let accent: NSColor = switch st {
+        case .running: Theme.sysGreen
+        case .scheduled: Theme.sysOrange
+        case .finished: Theme.sysGray
+        case .stopped: Theme.sysRed
+        }
         // accent dot (+ soft ring)
         let topCY: CGFloat = 10 + 8.5
         NSColor(white: 1, alpha: 0.04).setFill()
         NSBezierPath(ovalIn: NSRect(x: 15 - 3, y: topCY - 7, width: 14, height: 14)).fill()
         accent.setFill()
         NSBezierPath(ovalIn: NSRect(x: 15, y: topCY - 4, width: 8, height: 8)).fill()
-        if st == .fin || st == .stop {
-            let glyph = st == .fin ? "✓" : "■"
+        if st == .finished || st == .stopped {
+            let glyph = st == .finished ? "✓" : "■"
             let g = NSAttributedString(string: glyph, attributes: [
-                .font: NSFont.systemFont(ofSize: st == .fin ? 6 : 5, weight: .black),
+                .font: NSFont.systemFont(ofSize: st == .finished ? 6 : 5, weight: .black),
                 .foregroundColor: Theme.hex(0x0e0f13)])
             let gsz = g.size()
             g.draw(at: NSPoint(x: 19 - gsz.width / 2, y: topCY - gsz.height / 2))
@@ -94,36 +105,36 @@ final class TimerRowView: FlippedView {
             .font: NSFont.systemFont(ofSize: 13.5), .foregroundColor: Theme.label3]
         let title = NSMutableAttributedString()
         switch st {
-        case .on:
-            title.append(NSAttributedString(string: clock(Int(t.elapsed)), attributes: [
+        case .running:
+            title.append(NSAttributedString(string: Format.clock(elapsed), attributes: [
                 .font: bold, .foregroundColor: Theme.label]))
-            if t.isPerpetual {
+            if t.config.isPerpetual {
                 title.append(NSAttributedString(string: " · perpetuity", attributes: dim))
             } else {
                 title.append(NSAttributedString(string: " of ", attributes: dim))
-                title.append(NSAttributedString(string: clock(Int(t.windowSeconds)), attributes: [
+                title.append(NSAttributedString(string: Format.clock(window), attributes: [
                     .font: bold, .foregroundColor: Theme.label]))
             }
-        case .up:
+        case .scheduled:
             title.append(NSAttributedString(string: "Starts \(Self.timeFormatter.string(from: t.start))", attributes: [
                 .font: bold, .foregroundColor: Theme.label]))
-        case .fin:
+        case .finished:
             title.append(NSAttributedString(string: "Completed", attributes: [
                 .font: bold, .foregroundColor: Theme.label2]))
             title.append(NSAttributedString(string: " · ", attributes: dim))
-            title.append(NSAttributedString(string: clock(Int(t.windowSeconds)), attributes: [
+            title.append(NSAttributedString(string: Format.clock(window), attributes: [
                 .font: bold, .foregroundColor: Theme.label2]))
-        case .stop:
-            title.append(NSAttributedString(string: "Stopped at \(clock(Int(t.elapsed)))", attributes: [
+        case .stopped:
+            title.append(NSAttributedString(string: "Stopped at \(Format.clock(elapsed))", attributes: [
                 .font: bold, .foregroundColor: Theme.label2]))
         }
         title.draw(at: NSPoint(x: 32, y: 10))
 
         // badge (hidden while hovering — the actions take its corner)
         if !hovering {
-            let badgeText = st == .up
-                ? "in \(clock(Int((-t.elapsed).rounded(.up))))"
-                : "\(min(t.marksElapsed, t.totalMarks)) / \(t.totalMarks) ticks"
+            let badgeText = st == .scheduled
+                ? "in \(Format.countdown(fromElapsed: elapsed))"
+                : "\(min(t.marksElapsed(at: now), markCount)) / \(markCount) ticks"
             let b = NSAttributedString(string: badgeText, attributes: [
                 .font: NSFont.monospacedDigitSystemFont(ofSize: 11.5, weight: .semibold),
                 .foregroundColor: Theme.label2])
@@ -136,17 +147,17 @@ final class TimerRowView: FlippedView {
         } else {
             // hover actions
             for (i, rect) in actionRects.enumerated() {
-                let (glyph, danger, _) = actions[i]
+                let action = actions[i]
                 var bg = NSColor(white: 1, alpha: 0.10)
                 var fg = Theme.label
                 if i == hoverAction {
-                    if danger { bg = Theme.sysRed; fg = .white }
+                    if action.isDanger { bg = Theme.sysRed; fg = .white }
                     else { bg = Theme.sysOrange; fg = Theme.hex(0x111111) }
                 }
                 bg.setFill(); roundedPath(rect, 6).fill()
                 NSColor(white: 1, alpha: 0.14).setStroke()
                 roundedPath(rect.insetBy(dx: 0.25, dy: 0.25), 6).stroke()
-                NSAttributedString(string: glyph, attributes: [
+                NSAttributedString(string: action.glyph, attributes: [
                     .font: NSFont.systemFont(ofSize: 12), .foregroundColor: fg])
                     .draw(centeredIn: rect)
             }
@@ -160,37 +171,36 @@ final class TimerRowView: FlippedView {
         roundedPath(track, 3).fill()
         let frac: CGFloat
         switch st {
-        case .on, .stop: frac = t.progress
-        case .up: frac = 0
-        case .fin: frac = 1
+        case .running, .stopped: frac = t.progress(at: now)
+        case .scheduled: frac = 0
+        case .finished: frac = 1
         }
         if frac > 0 {
             let fill = NSRect(x: tx0, y: trackY, width: (tx1 - tx0) * frac, height: 6)
             NSGraphicsContext.current?.saveGraphicsState()
-            if st == .on {
+            if st == .running {
                 let glow = NSShadow()
                 glow.shadowColor = Theme.sysGreen.withAlphaComponent(0.35)
                 glow.shadowBlurRadius = 10
                 glow.set()
             }
             switch st {
-            case .on: drawVerticalGradient(fill, 3, Theme.hex(0x2bbe50), Theme.sysGreen)
-            case .up: Theme.sysOrange.setFill(); roundedPath(fill, 3).fill()
-            case .fin: NSGradient(starting: Theme.hex(0x5a5a5f), ending: Theme.hex(0x8a8a8f))?
+            case .running: drawVerticalGradient(fill, 3, Theme.hex(0x2bbe50), Theme.sysGreen)
+            case .scheduled: Theme.sysOrange.setFill(); roundedPath(fill, 3).fill()
+            case .finished: NSGradient(starting: Theme.hex(0x5a5a5f), ending: Theme.hex(0x8a8a8f))?
                 .draw(in: roundedPath(fill, 3), angle: 0)
-            case .stop: NSGradient(starting: Theme.hex(0xc4362c), ending: Theme.sysRed)?
+            case .stopped: NSGradient(starting: Theme.hex(0xc4362c), ending: Theme.sysRed)?
                 .draw(in: roundedPath(fill, 3), angle: 0)
             }
             NSGraphicsContext.current?.restoreGraphicsState()
         }
         // interval marks
-        if t.totalMarks > 0 {
-            for i in 1...t.totalMarks {
-                // Perpetuity's track is one clock hour; marks sit at their true times.
-                let pos = t.isPerpetual ? Double(i) * t.intervalSeconds / 3600
-                                        : Double(i) / Double(t.totalMarks)
-                let mx = tx0 + (tx1 - tx0) * CGFloat(pos)
-                let fired = i <= t.marksElapsed && st != .up
+        if markCount > 0 {
+            let marksElapsed = t.marksElapsed(at: now)
+            for i in 1...markCount {
+                // Marks sit at their true times along the window (or clock hour).
+                let mx = tx0 + (tx1 - tx0) * CGFloat(t.config.position(ofMark: i))
+                let fired = i <= marksElapsed && st != .scheduled
                 if fired {
                     NSGraphicsContext.current?.saveGraphicsState()
                     let glow = NSShadow()
@@ -207,7 +217,7 @@ final class TimerRowView: FlippedView {
             }
         }
         // live playhead (running rows only)
-        if st == .on {
+        if st == .running {
             let hx = tx0 + (tx1 - tx0) * frac
             NSGraphicsContext.current?.saveGraphicsState()
             let sh = NSShadow()
@@ -236,14 +246,16 @@ final class TimerRowView: FlippedView {
             s.append(NSAttributedString(string: b, attributes: [.font: subBold, .foregroundColor: subBoldColor]))
             return s
         }
+        let every = boldPair("Every ", Format.duration(t.config.interval))
+        let sound = boldPair("♪ ", t.config.sound)
         switch st {
-        case .on:
-            parts = [boldPair("Every ", shortDuration(t.intervalSeconds)), boldPair("♪ ", t.sound)]
-        case .up:
-            parts = [plain("\(shortDuration(t.windowSeconds)) window"),
-                     boldPair("Every ", shortDuration(t.intervalSeconds)), boldPair("♪ ", t.sound)]
-        case .fin, .stop:
-            parts = [boldPair("Every ", shortDuration(t.intervalSeconds))]
+        case .running:
+            parts = [every, sound]
+        case .scheduled:
+            // Perpetual timers have no window to show.
+            parts = (t.config.window.map { [plain("\(Format.duration($0)) window")] } ?? []) + [every, sound]
+        case .finished, .stopped:
+            parts = [every]
         }
         var sx: CGFloat = 32
         let subY = trackY + 6 + 1 + 4

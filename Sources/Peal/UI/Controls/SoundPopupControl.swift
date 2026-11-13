@@ -1,4 +1,5 @@
 import AppKit
+import PealCore
 
 // Hand-drawn replacement for NSPopUpButton: shares the 28px field style of the
 // steppers/segments and opens a SoundListView in a borderless child window.
@@ -15,7 +16,7 @@ final class SoundPopupControl: FlippedView {
 
     init(sounds: [String], selected: String) {
         self.sounds = sounds
-        self.selectedSound = sounds.contains(selected) ? selected : (sounds.first ?? "Tink")
+        self.selectedSound = sounds.contains(selected) ? selected : (sounds.first ?? TimerSettings.defaultSound)
         super.init(frame: NSRect(x: 0, y: 0, width: 176, height: 28))
     }
     required init?(coder: NSCoder) { fatalError() }

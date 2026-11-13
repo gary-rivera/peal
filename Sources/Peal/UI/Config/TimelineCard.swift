@@ -1,27 +1,18 @@
 import AppKit
+import PealCore
 
 // THE CENTERPIECE — live tick-pattern timeline (.timeline-card in the mockup).
 final class TimelineCard: FlippedView {
-    var intervalSeconds: Double = 6
-    var windowSeconds: Double = 60
-    var isPerpetual = false
-    var isValid: Bool {
-        let m = marks
-        return m > 0 && m <= 9
-    }
-    private var marks: Int {
-        isPerpetual ? TickTimer.marksPerHour(interval: intervalSeconds)
-                    : (intervalSeconds > 0 ? Int(windowSeconds / intervalSeconds) : 0)
-    }
     // Perpetuity previews one clock hour of the endless pattern.
-    private var effectiveWindow: Double { isPerpetual ? 3600 : windowSeconds }
+    private(set) var config = TimerConfig(interval: 360, mode: .timed(window: 3600), sound: "")
+    var isValid: Bool { config.issue == nil }
 
     // The note sentence carries the explanation; the legend is one quiet line.
     private static let legendTexts = [
         "Each mark is one interval — bar height = ticks played; the bell ends the window.",
         "Each mark is one interval — bar height = ticks played; the count resets on the hour.",
     ]
-    private var legendText: String { Self.legendTexts[isPerpetual ? 1 : 0] }
+    private var legendText: String { Self.legendTexts[config.isPerpetual ? 1 : 0] }
 
     // End-cap glyph as a brand-tinted SF Symbol (emoji can't take the accent color).
     private static func tintedSymbol(_ name: String) -> NSImage? {
@@ -52,18 +43,16 @@ final class TimelineCard: FlippedView {
         }.max()!
     }
 
-    func update(interval: Double, window: Double, perpetual: Bool) {
-        intervalSeconds = interval
-        windowSeconds = window
-        isPerpetual = perpetual
+    func update(_ config: TimerConfig) {
+        self.config = config
         needsDisplay = true
     }
 
     override func draw(_ dirtyRect: NSRect) {
         let r = bounds
-        let m = marks
-        let over = m > 9
-        let bad = over || m == 0
+        let m = config.markCount
+        let issue = config.issue
+        let bad = issue != nil
 
         // card body + tint + border
         let card = roundedPath(r.insetBy(dx: 0.5, dy: 0.5), 14)
@@ -82,9 +71,11 @@ final class TimelineCard: FlippedView {
         // header: quiet label left, marks-count chip right
         Theme.caption("Interval time preview").draw(at: NSPoint(x: 18, y: 16))
         let countText: String
-        if over { countText = "\(m) marks — max 9" }
-        else if m == 0 { countText = "no marks" }
-        else { countText = "\(m) mark" + (m == 1 ? "" : "s") }
+        switch issue {
+        case .tooManyMarks: countText = "\(m) marks — max \(TimerConfig.maxMarks)"
+        case .noMarks: countText = "no marks"
+        default: countText = "\(m) mark" + (m == 1 ? "" : "s")
+        }
         let count = NSAttributedString(string: countText, attributes: [
             .font: NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .semibold),
             .foregroundColor: bad ? Theme.redSoft : Theme.accentSoft])
@@ -111,12 +102,12 @@ final class TimelineCard: FlippedView {
             let shown = min(m, 12)
             let numFont = NSFont.monospacedSystemFont(ofSize: 9, weight: .regular)
             for i in 1...shown {
-                let frac = min(1, Double(i) * intervalSeconds / effectiveWindow)
-                let cx = x0 + (x1 - x0) * CGFloat(frac)
+                let cx = x0 + (x1 - x0) * CGFloat(config.position(ofMark: i))
                 Theme.line2.setFill()
                 NSRect(x: cx - 1, y: baseY - 2 - 8, width: 2, height: 8).fill()
-                let bars = i <= 9 ? i : 1
-                let color = i <= 9 ? Theme.accent : Theme.red
+                let withinLimit = i <= TimerConfig.maxMarks
+                let bars = withinLimit ? i : 1
+                let color = withinLimit ? Theme.accent : Theme.red
                 NSGraphicsContext.current?.saveGraphicsState()
                 let glow = NSShadow()
                 glow.shadowColor = color.withAlphaComponent(0.45)
@@ -136,7 +127,7 @@ final class TimelineCard: FlippedView {
             }
         }
         // end cap: the window's chime bell, or perpetuity's hourly reset arrow
-        if let glyph = isPerpetual ? Self.repeatImage : Self.bellImage {
+        if let glyph = config.isPerpetual ? Self.repeatImage : Self.bellImage {
             let gsz = glyph.size
             glyph.draw(in: NSRect(x: x1 - gsz.width / 2, y: baseY - 4 - gsz.height,
                                   width: gsz.width, height: gsz.height),
@@ -145,30 +136,20 @@ final class TimelineCard: FlippedView {
         }
 
         // note
-        var segments: [(String, Bool)]
-        let baseColor: NSColor, boldColor: NSColor
-        if over {
-            baseColor = Theme.redSoft; boldColor = Theme.ink
-            segments = [(isPerpetual ? "Each hour fits " : "This window fits ", false),
-                        ("\(m) marks", true),
-                        (" — Peal plays at most 9. Lengthen the interval", false),
-                        (isPerpetual ? "." : " or shorten the window.", false)]
-        } else if m == 0 {
-            baseColor = Theme.redSoft; boldColor = Theme.ink
-            segments = [(isPerpetual
-                ? "The interval is an hour or longer — no ticks would play."
-                : "The interval is longer than the window — no ticks would play.", false)]
-        } else if isPerpetual {
-            baseColor = Theme.ink2; boldColor = Theme.ink
-            segments = [("A tick every ", false), (shortDuration(intervalSeconds), true),
-                        (" past the hour: bursts grow ", false), ("1 → \(m)", true),
-                        (", resetting with a bong each hour, forever.", false)]
-        } else {
-            baseColor = Theme.ink2; boldColor = Theme.ink
-            segments = [("A tick every ", false), (shortDuration(intervalSeconds), true),
-                        (" across ", false), (shortDuration(windowSeconds), true),
+        let segments: [ConfigIssue.Phrase]
+        let baseColor = bad ? Theme.redSoft : Theme.ink2, boldColor = Theme.ink
+        let every = Format.duration(config.interval)
+        if let issue {
+            segments = issue.phrases(for: config.mode)
+        } else if let window = config.window {
+            segments = [("A tick every ", false), (every, true),
+                        (" across ", false), (Format.duration(window), true),
                         (": bursts grow ", false), ("1 → \(m)", true),
                         (", then a double chime.", false)]
+        } else {
+            segments = [("A tick every ", false), (every, true),
+                        (" past the hour: bursts grow ", false), ("1 → \(m)", true),
+                        (", resetting with a bong each hour, forever.", false)]
         }
         let note = NSMutableAttributedString()
         for (text, bold) in segments {

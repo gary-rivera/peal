@@ -38,15 +38,23 @@ swift run Peal    # quit from the menu, or: pkill Peal
 
 ## Layout
 
-- `Package.swift` — Swift package; one executable target, Swift 6 language mode
-- `Sources/Peal/`
+- `Package.swift` — Swift package (Swift 6 language mode)
+- `Sources/PealCore/` — Foundation-only domain logic, no AppKit
+  - `TimerConfig` — interval + `TimerMode` (timed window or perpetual),
+    mark count/positions, clock-hour math
+  - `TickTimer` — one timer's lifecycle; `advance(now:)` returns events
+    (start, ticks, hour reset, finish) that the app turns into sounds
+  - `ConfigIssue` — validation, shared by the config panel and start alert
+  - `TimerSettings` — the panel's persisted choices (typed UserDefaults keys)
+  - `Formatting` — clock / duration strings
+- `Sources/Peal/` — the AppKit app
   - `main.swift` — entry point (app overview lives in its header comment)
   - `App/` — `AppDelegate`, legacy-defaults migration, menu icon suppression
-  - `Model/` — `TickTimer` and duration formatting
   - `UI/Theme/` — design tokens, `FlippedView`, drawing helpers
   - `UI/Controls/` — config panel controls, one per file
   - `UI/Config/` — `TimelineCard` (interval preview)
   - `UI/Menu/` — menu row views
+- `Tests/PealCoreTests/` — Swift Testing suite for PealCore (`swift test`)
 - `build.sh` — build + install script; also generates Info.plist
 - `assets/` — app icon (`Peal.icns`, compiled from `Peal.iconset/`,
   source art `Peal.png`). The menu bar uses the SF Symbols bell
