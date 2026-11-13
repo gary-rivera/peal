@@ -183,3 +183,44 @@ private func perpetual(every interval: Double) -> TimerConfig {
         #expect(settings.config().interval == minutes(10))
     }
 }
+
+@Suite struct TimerStoreTests {
+    private func timer(startingIn offset: Double, every interval: Double = 10, over window: Double = 45) -> TickTimer {
+        TickTimer(start: topOfHour + minutes(offset), config: timed(every: interval, over: window),
+                  now: topOfHour, calendar: utc)
+    }
+
+    @Test func keepsTimersSortedByStart() {
+        let store = TimerStore()
+        let late = timer(startingIn: 30), early = timer(startingIn: 5), middle = timer(startingIn: 10)
+        [late, early, middle].forEach(store.add)
+        #expect(store.timers.map(\.start) == [early, middle, late].map(\.start))
+        store.remove(middle)
+        #expect(store.timers.count == 2)
+    }
+
+    @Test func statusTitleFeaturesEarliestRunningThenNextScheduled() {
+        let store = TimerStore()
+        #expect(store.statusTitle(at: topOfHour) == "")
+        store.add(timer(startingIn: 4.5))
+        #expect(store.statusTitle(at: topOfHour) == "in 4:30")
+        store.add(timer(startingIn: -25))
+        #expect(store.statusTitle(at: topOfHour) == "2/4 +1")
+        store.stopAll(at: topOfHour)
+        #expect(!store.hasRunning(at: topOfHour))
+        // stopAll leaves the scheduled timer alone; it runs, then finishes its window.
+        let later = topOfHour + minutes(60)
+        #expect(store.advance(now: later).map(\.event) == [.started, .finished])
+        #expect(store.statusTitle(at: later) == "✓")
+    }
+
+    @Test func advanceTagsEventsWithTheirTimer() {
+        let store = TimerStore()
+        let a = timer(startingIn: 0), b = timer(startingIn: 5)
+        store.add(a); store.add(b)
+        let events = store.advance(now: topOfHour + minutes(10))
+        #expect(events.count == 2)
+        #expect(events[0].timer === a && events[0].event == .ticks(1))
+        #expect(events[1].timer === b && events[1].event == .started)
+    }
+}
