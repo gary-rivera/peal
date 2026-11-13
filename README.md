@@ -45,8 +45,6 @@ back to the SF Symbols metronome — expected.
 - `build.sh` — build + install script; also generates Info.plist
 - `assets/` — app icon (`Tickle.icns`, compiled from `Tickle.iconset/`,
   source art `Tickle.png`) and the menu bar template image (`MenuIcon.png`)
-- `mockups/` — HTML design mockups the menu and config-panel UI were
-  built from (referenced from the Tickle.swift header comment)
 
 To regenerate the icns after editing the iconset:
 `iconutil -c icns assets/Tickle.iconset -o assets/Tickle.icns`
