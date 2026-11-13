@@ -153,7 +153,7 @@ final class ConfigPanelController: NSObject {
         caption("Interval")
         place(intervalStepper)
         place(intervalSeg, x: padX + intervalStepper.frame.width + 12)
-        y += 28 + 24
+        y += Theme.fieldHeight + 24
 
         // Over a window of — or in perpetuity, ticking to the clock hour forever.
         // The mode segment leads the row; the window controls hide in perpetuity.
@@ -162,7 +162,7 @@ final class ConfigPanelController: NSObject {
         let windowX = padX + modeSeg.frame.width + 12
         place(windowStepper, x: windowX)
         place(windowSeg, x: windowX + windowStepper.frame.width + 12)
-        y += 28 + 12
+        y += Theme.fieldHeight + 12
 
         // Centerpiece timeline
         place(timelineCard)
@@ -171,12 +171,12 @@ final class ConfigPanelController: NSObject {
         caption("Counter sound")
         place(soundPopup)
         place(previewButton, x: padX + soundPopup.frame.width + 12)
-        y += 28 + 24
+        y += Theme.fieldHeight + 24
 
         // Tick volume (global — scales every Peal sound, live)
         caption("Tick volume")
         place(volumeSlider)
-        y += 28 + 22
+        y += Theme.fieldHeight + 22
 
         // Footer: hairline, Now / At-a-time segment, primary button
         let hairline = FlippedView(frame: NSRect(x: 0, y: 0, width: contentW, height: 1))

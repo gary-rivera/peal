@@ -28,6 +28,7 @@ final class SoundListView: FlippedView {
         scrollOffset = clampOffset(
             CGFloat(selectedIndex) * Self.rowH + Self.rowH / 2 - innerHeight / 2)
     }
+    @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError() }
 
     private var innerHeight: CGFloat { bounds.height - Self.pad * 2 }
@@ -50,7 +51,7 @@ final class SoundListView: FlippedView {
     // First click must register even though the borderless window is never key.
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
-    override var hoverTrackingOptions: NSTrackingArea.Options? { [.mouseEnteredAndExited, .mouseMoved, .activeAlways, .inVisibleRect] }
+    override var hoverTrackingOptions: NSTrackingArea.Options? { .hover }
     override func mouseMoved(with e: NSEvent) {
         setHighlight(rowAt(convert(e.locationInWindow, from: nil)), audition: true)
     }
@@ -125,34 +126,31 @@ final class SoundListView: FlippedView {
 
     override func draw(_ dirtyRect: NSRect) {
         let r = bounds
-        let card = roundedPath(r.insetBy(dx: 0.5, dy: 0.5), 9)
-        Theme.hex(0x2a2330).setFill(); card.fill()
-        Theme.hex(0x443b4a).setStroke(); card.stroke()
+        let card = NSBezierPath(roundedRect: r.insetBy(dx: 0.5, dy: 0.5), radius: 9)
+        Theme.popoverBG.setFill(); card.fill()
+        Theme.popoverBorder.setStroke(); card.stroke()
 
         NSGraphicsContext.current?.saveGraphicsState()
-        roundedPath(r.insetBy(dx: Self.pad, dy: Self.pad), 5).addClip()
+        NSBezierPath(roundedRect: r.insetBy(dx: Self.pad, dy: Self.pad), radius: 5).addClip()
         for i in 0..<sounds.count {
             let rr = rowRect(i)
             guard rr.maxY > 0, rr.minY < r.height else { continue }
             let hovered = i == highlighted
             let isSelected = i == selectedIndex
-            if hovered { Theme.accentDeep.setFill(); roundedPath(rr, 5).fill() }
+            if hovered { Theme.accentDeep.setFill(); NSBezierPath(roundedRect: rr, radius: 5).fill() }
             if isSelected {
-                let check = NSAttributedString(string: "✓", attributes: [
-                    .font: NSFont.systemFont(ofSize: 11, weight: .semibold),
-                    .foregroundColor: hovered ? NSColor.white : Theme.accentSoft])
+                let check = NSAttributedString("✓", font: .systemFont(ofSize: 11, weight: .semibold),
+                                               color: hovered ? NSColor.white : Theme.accentSoft)
                 let csz = check.size()
                 check.draw(at: NSPoint(x: rr.minX + 8, y: rr.midY - csz.height / 2))
             }
-            let name = NSAttributedString(string: sounds[i], attributes: [
-                .font: NSFont.systemFont(ofSize: 13, weight: isSelected ? .semibold : .regular),
-                .foregroundColor: hovered || isSelected ? NSColor.white : Theme.ink])
+            let name = NSAttributedString(sounds[i], font: .systemFont(ofSize: 13, weight: isSelected ? .semibold : .regular),
+                                          color: hovered || isSelected ? NSColor.white : Theme.ink)
             let nsz = name.size()
             name.draw(at: NSPoint(x: rr.minX + 8 + 12 + 8, y: rr.midY - nsz.height / 2))
             if hovered {
-                let hint = NSAttributedString(string: "▶", attributes: [
-                    .font: NSFont.systemFont(ofSize: 9),
-                    .foregroundColor: NSColor(white: 1, alpha: 0.75)])
+                let hint = NSAttributedString("▶", font: .systemFont(ofSize: 9),
+                                              color: NSColor(white: 1, alpha: 0.75))
                 let hsz = hint.size()
                 hint.draw(at: NSPoint(x: rr.maxX - 10 - hsz.width, y: rr.midY - hsz.height / 2))
             }
@@ -160,7 +158,7 @@ final class SoundListView: FlippedView {
         NSGraphicsContext.current?.restoreGraphicsState()
 
         // overflow fades in place of a scroller
-        let menuBG = Theme.hex(0x2a2330)
+        let menuBG = Theme.popoverBG
         let fadeW = r.width - Self.pad * 2
         if scrollOffset > 0.5 {
             NSGradient(starting: menuBG, ending: menuBG.withAlphaComponent(0))?

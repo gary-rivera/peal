@@ -17,8 +17,9 @@ final class SoundPopupControl: FlippedView {
     init(sounds: [String], selected: String) {
         self.sounds = sounds
         self.selectedSound = sounds.contains(selected) ? selected : (sounds.first ?? TimerSettings.defaultSound)
-        super.init(frame: NSRect(x: 0, y: 0, width: 176, height: 28))
+        super.init(frame: NSRect(x: 0, y: 0, width: 176, height: Theme.fieldHeight))
     }
+    @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError() }
 
     func select(_ sound: String) {
@@ -104,12 +105,10 @@ final class SoundPopupControl: FlippedView {
 
     override func draw(_ dirtyRect: NSRect) {
         let r = bounds
-        (hovering || isOpen ? Theme.hex(0x332c39) : Theme.hex(0x2b2530)).setFill()
-        roundedPath(r, 7).fill()
-        (isOpen ? Theme.accent.withAlphaComponent(0.45) : NSColor(white: 0, alpha: 0.55)).setStroke()
-        roundedPath(r.insetBy(dx: 0.25, dy: 0.25), 7).stroke()
-        let title = NSAttributedString(string: selectedSound, attributes: [
-            .font: NSFont.systemFont(ofSize: 13), .foregroundColor: Theme.ink])
+        (hovering || isOpen ? Theme.controlHover : Theme.controlBG).setFill()
+        NSBezierPath(roundedRect: r, radius: Theme.fieldRadius).fill()
+        r.strokeFieldBorder(isOpen ? Theme.accent.withAlphaComponent(0.45) : Theme.fieldBorder)
+        let title = NSAttributedString(selectedSound, font: .systemFont(ofSize: 13), color: Theme.ink)
         title.draw(at: NSPoint(x: 11, y: r.midY - title.size().height / 2))
         // double chevron
         Theme.ink3.setStroke()

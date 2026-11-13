@@ -55,7 +55,7 @@ final class TimelineCard: FlippedView {
         let bad = issue != nil
 
         // card body + tint + border
-        let card = roundedPath(r.insetBy(dx: 0.5, dy: 0.5), 14)
+        let card = NSBezierPath(roundedRect: r.insetBy(dx: 0.5, dy: 0.5), radius: 14)
         (bad ? Theme.cardBad : Theme.cardBG).setFill(); card.fill()
         NSGraphicsContext.current?.saveGraphicsState()
         card.addClip()
@@ -76,18 +76,13 @@ final class TimelineCard: FlippedView {
         case .noMarks: countText = "no marks"
         default: countText = "\(m) mark" + (m == 1 ? "" : "s")
         }
-        let count = NSAttributedString(string: countText, attributes: [
-            .font: NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .semibold),
-            .foregroundColor: bad ? Theme.redSoft : Theme.accentSoft])
+        let count = NSAttributedString(countText, font: .monospacedDigitSystemFont(ofSize: 11, weight: .semibold),
+                                       color: bad ? Theme.redSoft : Theme.accentSoft)
         let csz = count.size()
         let pill = NSRect(x: r.width - 18 - csz.width - 18, y: 15,
                           width: csz.width + 18, height: 19)
         let pillTint = bad ? Theme.red : Theme.accent
-        pillTint.withAlphaComponent(0.14).setFill()
-        roundedPath(pill, 9.5).fill()
-        pillTint.withAlphaComponent(0.28).setStroke()
-        roundedPath(pill.insetBy(dx: 0.5, dy: 0.5), 9.5).stroke()
-        count.draw(centeredIn: pill)
+        count.drawPill(in: pill, fill: pillTint.withAlphaComponent(0.14), stroke: pillTint.withAlphaComponent(0.28))
 
         // track
         let x0 = 18.0 + 6, x1 = r.width - 18 - 6
@@ -108,20 +103,15 @@ final class TimelineCard: FlippedView {
                 let withinLimit = i <= TimerConfig.maxMarks
                 let bars = withinLimit ? i : 1
                 let color = withinLimit ? Theme.accent : Theme.red
-                NSGraphicsContext.current?.saveGraphicsState()
-                let glow = NSShadow()
-                glow.shadowColor = color.withAlphaComponent(0.45)
-                glow.shadowBlurRadius = 6
-                glow.set()
-                var by = baseY - 2 - 8 - 6 - 5
-                for _ in 0..<bars {
+                let lowestBarY: CGFloat = baseY - 2 - 8 - 6 - 5
+                withShadow(color.withAlphaComponent(0.45), blur: 6) {
                     color.setFill()
-                    roundedPath(NSRect(x: cx - 6, y: by, width: 12, height: 5), 2).fill()
-                    by -= 7
+                    for bar in 0..<bars {
+                        let by = lowestBarY - CGFloat(bar) * 7
+                        NSBezierPath(roundedRect: NSRect(x: cx - 6, y: by, width: 12, height: 5), radius: 2).fill()
+                    }
                 }
-                NSGraphicsContext.current?.restoreGraphicsState()
-                let no = NSAttributedString(string: "\(i)", attributes: [
-                    .font: numFont, .foregroundColor: Theme.ink3])
+                let no = NSAttributedString("\(i)", font: numFont, color: Theme.ink3)
                 let nsz = no.size()
                 no.draw(at: NSPoint(x: cx - nsz.width / 2, y: baseY + 6))
             }
@@ -153,17 +143,15 @@ final class TimelineCard: FlippedView {
         }
         let note = NSMutableAttributedString()
         for (text, bold) in segments {
-            note.append(NSAttributedString(string: text, attributes: [
-                .font: NSFont.systemFont(ofSize: 12.5, weight: bold ? .semibold : .regular),
-                .foregroundColor: bold ? boldColor : baseColor]))
+            note.append(NSAttributedString(text, font: .systemFont(ofSize: 12.5, weight: bold ? .semibold : .regular),
+                                           color: bold ? boldColor : baseColor))
         }
         let noteY = baseY + 26
         note.draw(in: NSRect(x: 18, y: noteY, width: r.width - 36, height: 34))
 
         // legend: one quiet line under the note
         let legendLines = Self.legendLineCount(width: r.width)
-        NSAttributedString(string: legendText, attributes: [
-            .font: NSFont.systemFont(ofSize: 11), .foregroundColor: Theme.ink3])
+        NSAttributedString(legendText, font: .systemFont(ofSize: 11), color: Theme.ink3)
             .draw(in: NSRect(x: 18, y: noteY + 34 + 2,
                              width: r.width - 36, height: CGFloat(legendLines) * 15))
     }

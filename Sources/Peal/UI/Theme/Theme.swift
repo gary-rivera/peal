@@ -23,6 +23,17 @@ enum Theme {
     static let fieldBG  = hex(0x201a22)
     static let cardBG   = hex(0x261f28)
     static let cardBad  = hex(0x281c22)
+    // panel controls
+    static let fieldHeight: CGFloat = 28
+    static let fieldRadius: CGFloat = 7
+    static let fieldBorder  = NSColor(white: 0, alpha: 0.55)
+    static let controlBG    = hex(0x2b2530)  // popup at rest, stepper zone pressed
+    static let controlHover = hex(0x332c39)
+    static let stepperZoneTop      = hex(0x3a3340), stepperZoneBottom      = hex(0x322c37)
+    static let stepperZoneHoverTop = hex(0x483f4c), stepperZoneHoverBottom = hex(0x3b3440)
+    static let buttonDisabled = hex(0x39323b)
+    static let popoverBG     = hex(0x2a2330)  // sound list dropdown
+    static let popoverBorder = hex(0x443b4a)
     // menu palette
     static let sysGreen  = hex(0x30d158)
     static let sysOrange = hex(0xff9f0a)
@@ -31,12 +42,15 @@ enum Theme {
     static let label  = hex(0xf5f5f7)
     static let label2 = NSColor(srgbRed: 235/255, green: 235/255, blue: 245/255, alpha: 0.62)
     static let label3 = NSColor(srgbRed: 235/255, green: 235/255, blue: 245/255, alpha: 0.34)
+    static let labelEmphasis = label2.withAlphaComponent(0.78)  // bold values in a row's sub-line
+    static let onAccent  = hex(0x0e0f13)  // glyph drawn on a colored dot
+    static let onOrange  = hex(0x111111)  // glyph on the orange hover action
+    static let trackRunningTop = hex(0x2bbe50)                    // → sysGreen
+    static let trackFinishedStart = hex(0x5a5a5f), trackFinishedEnd = hex(0x8a8a8f)
+    static let trackStoppedStart = hex(0xc4362c)                  // → sysRed
 
     static func caption(_ text: String) -> NSAttributedString {
         // Sentence-case field label, macOS style: quiet so the controls lead.
-        NSAttributedString(string: text, attributes: [
-            .font: NSFont.systemFont(ofSize: 13, weight: .medium),
-            .foregroundColor: ink2,
-        ])
+        NSAttributedString(text, font: NSFont.systemFont(ofSize: 13, weight: .medium), color: ink2)
     }
 }

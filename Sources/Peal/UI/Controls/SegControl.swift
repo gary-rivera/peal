@@ -15,8 +15,9 @@ final class SegControl: FlippedView {
             ceil(NSAttributedString(string: item, attributes: [.font: font]).size().width) + 24
         }
         let w = cellWidths.reduce(0, +) + 4
-        super.init(frame: NSRect(x: 0, y: 0, width: w, height: 28))
+        super.init(frame: NSRect(x: 0, y: 0, width: w, height: Theme.fieldHeight))
     }
+    @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError() }
 
     override func mouseDown(with e: NSEvent) {
@@ -33,21 +34,20 @@ final class SegControl: FlippedView {
 
     override func draw(_ dirtyRect: NSRect) {
         let r = bounds
-        Theme.fieldBG.setFill(); roundedPath(r, 7).fill()
+        Theme.fieldBG.setFill(); NSBezierPath(roundedRect: r, radius: Theme.fieldRadius).fill()
         var x: CGFloat = 2
         for (i, w) in cellWidths.enumerated() {
             let cell = NSRect(x: x, y: 2, width: w, height: r.height - 4)
             if i == selected {
                 Theme.accentDeep.setFill()
-                roundedPath(cell, 5).fill()
+                NSBezierPath(roundedRect: cell, radius: 5).fill()
             }
             let font = NSFont.systemFont(ofSize: 12.5, weight: i == selected ? .semibold : .medium)
             let color: NSColor = i == selected ? .white : Theme.ink2
-            NSAttributedString(string: items[i], attributes: [.font: font, .foregroundColor: color])
+            NSAttributedString(items[i], font: font, color: color)
                 .draw(centeredIn: cell)
             x += w
         }
-        NSColor(white: 0, alpha: 0.55).setStroke()
-        roundedPath(r.insetBy(dx: 0.25, dy: 0.25), 7).stroke()
+        r.strokeFieldBorder()
     }
 }
