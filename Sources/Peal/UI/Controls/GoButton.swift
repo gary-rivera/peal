@@ -1,6 +1,6 @@
 import AppKit
 
-// Primary start button (.go in the mockup): pink-magenta gradient, disabled = flat gray.
+// Primary start button: pink-magenta gradient, disabled = flat gray.
 final class GoButton: PressableView {
     var title: String { didSet { sizeToFitTitle(); needsDisplay = true } }
     // When set, the button keeps this right edge as its title changes width.

@@ -13,7 +13,7 @@
 // (:10, :20, … for a 10m interval), a "Submarine" bong at :00 resets the
 // count, and the timer ticks forever until stopped by hand.
 //
-// Menu (per mockups/menu-redesign.html):
+// Menu:
 //   Start timer         open the configuration panel.
 //   Start in perpetuity  begin an endless clock-anchored timer right away.
 //   Play sample ticks   preview a 3-tick burst of the configured sound.
@@ -29,7 +29,7 @@
 //   Stop all            persistent footer button. Individual rows keep their
 //                       hover Reset for removing a single timer.
 //
-// Configuration panel (per mockups/config-panel-redesign.html):
+// Configuration panel:
 //   ± steppers with sec/min/hr unit segments for interval and window, a
 //   Timed/Perpetuity mode segment on the window row, a live
 //   "Interval time preview" timeline (every mark drawn as an escalating bar
@@ -48,7 +48,6 @@
 import AppKit
 
 MainActor.assumeIsolated {
-    migrateTickleDefaults()
     NSMenuItem.disableIcons()
     let app = NSApplication.shared
     let delegate = AppDelegate()

@@ -1,7 +1,7 @@
 import AppKit
 import PealCore
 
-// THE CENTERPIECE — live tick-pattern timeline (.timeline-card in the mockup).
+// THE CENTERPIECE — live tick-pattern timeline.
 final class TimelineCard: FlippedView {
     // Perpetuity previews one clock hour of the endless pattern.
     private(set) var config = TimerConfig(interval: 360, mode: .timed(window: 3600), sound: "")

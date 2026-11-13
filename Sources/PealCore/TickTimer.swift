@@ -37,8 +37,6 @@ package final class TickTimer {
         }
     }
 
-    package var isStopped: Bool { stoppedAt != nil }
-
     package func phase(at now: Date) -> Phase {
         if let stoppedAt {
             let completedWindow = config.window.map { stoppedAt.timeIntervalSince(start) >= $0 } ?? false

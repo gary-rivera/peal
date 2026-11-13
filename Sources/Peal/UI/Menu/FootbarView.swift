@@ -1,6 +1,6 @@
 import AppKit
 
-// Persistent Stop all footer (.footbar in the mockup, minus Reset all).
+// Persistent Stop all footer.
 final class FootbarView: FlippedView {
     var onStopAll: (() -> Void)?
     var stopEnabled = true { didSet { needsDisplay = true } }

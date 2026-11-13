@@ -1,6 +1,6 @@
 import AppKit
 
-// Scrolling list inside the sound popup (mockups sound-popup proposal): plum
+// Scrolling list inside the sound popup: plum
 // surface, magenta hover row, pink check on the current sound. Hovering a row
 // for 0.4s auditions it without committing.
 final class SoundListView: FlippedView {

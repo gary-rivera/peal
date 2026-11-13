@@ -1,6 +1,6 @@
 import AppKit
 
-// ± stepper number control (.num in the mockup): 104×28, −/+ zones flanking the value.
+// ± stepper number control: 104×28, −/+ zones flanking the value.
 final class StepperControl: FlippedView {
     var value: Int { didSet { needsDisplay = true } }
     var onChange: ((Int) -> Void)?

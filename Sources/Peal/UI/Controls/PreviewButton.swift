@@ -1,6 +1,6 @@
 import AppKit
 
-// 28×28 ▶ sound preview tile (.sound-preview in the mockup): subtle pink tint.
+// 28×28 ▶ sound preview tile: subtle pink tint.
 final class PreviewButton: PressableView {
     init() { super.init(frame: NSRect(x: 0, y: 0, width: Theme.fieldHeight, height: Theme.fieldHeight)) }
     @available(*, unavailable)

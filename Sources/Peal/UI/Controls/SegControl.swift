@@ -1,6 +1,6 @@
 import AppKit
 
-// macOS-style segmented control (.seg in the mockup).
+// macOS-style segmented control.
 final class SegControl: FlippedView {
     let items: [String]
     var selected: Int { didSet { needsDisplay = true } }

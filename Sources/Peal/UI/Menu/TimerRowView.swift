@@ -1,7 +1,7 @@
 import AppKit
 import PealCore
 
-// Rich timer row (.rich in the mockup): accent dot, two text tiers, tick-marked
+// Rich timer row: accent dot, two text tiers, tick-marked
 // progress track with playhead, and hover-revealed Stop/Reset actions.
 final class TimerRowView: FlippedView {
     let timer: TickTimer

@@ -48,11 +48,11 @@ swift run Peal    # quit from the menu, or: pkill Peal
   - `ConfigIssue` — validation, shared by the config panel and start alert
   - `TimerSettings` — the panel's persisted choices (typed UserDefaults keys)
   - `Formatting` — clock / duration strings
+  - `Date+Scheduling` — minute rounding, next occurrence of a picked time
 - `Sources/Peal/` — the AppKit app
   - `main.swift` — entry point (app overview lives in its header comment)
   - `App/` — `AppDelegate` (wires everything together), `SettingsStore`
-    (shared, persisted settings), `SoundPlayer`, legacy-defaults migration,
-    menu icon suppression
+    (shared, persisted settings), `SoundPlayer`, menu icon suppression
   - `UI/StatusItemController.swift` — menu bar icon and title
   - `UI/Theme/` — design tokens, `FlippedView`, drawing helpers
   - `UI/Controls/` — config panel controls, one per file

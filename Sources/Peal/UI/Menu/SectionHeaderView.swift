@@ -1,6 +1,6 @@
 import AppKit
 
-// Section header with state dot + live count pill (.rich-header in the mockup).
+// Section header with state dot + live count pill.
 final class SectionHeaderView: FlippedView {
     private let text: String
     private let dotColor: NSColor
