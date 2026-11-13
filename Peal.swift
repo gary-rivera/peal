@@ -1,6 +1,6 @@
-// Tickle — menu bar interview timer.
+// Peal — menu bar interview timer.
 //
-// Menu bar shows a metronome icon (filled while a timer is active) plus the
+// Menu bar shows a bell icon (filled while a timer is active) plus the
 // featured timer's progress as "marks elapsed / total marks" (e.g. "3/9" for
 // the 3rd of 9 interval marks in the window), "in 4:32" for the next scheduled
 // timer, or "✓" when all timers have finished. "+N" marks additional timers.
@@ -17,7 +17,7 @@
 //   Start timer         open the configuration panel.
 //   Start in perpetuity  begin an endless clock-anchored timer right away.
 //   Play sample ticks   preview a 3-tick burst of the configured sound.
-//   Tick volume         slider scaling every Tickle sound; shared with the
+//   Tick volume         slider scaling every Peal sound; shared with the
 //                       config panel's slider and persisted.
 //   <timer list>        rich custom rows grouped under section headers with a
 //                       state dot and live count pill — Ongoing, Upcoming,
@@ -42,15 +42,15 @@
 // Config values persist across launches (UserDefaults) as defaults for the
 // next timer; each launched timer keeps the settings it was started with.
 //
-// Build:  swiftc -O Tickle.swift -o tickle
-// Run:    ./tickle             Quit from the menu, or: pkill tickle
+// Build:  swiftc -O Peal.swift -o peal
+// Run:    ./peal             Quit from the menu, or: pkill peal
 
 import AppKit
 import ObjectiveC
 
 extension NSMenuItem {
     // macOS 26 auto-decorates standard selectors (e.g. terminate: → Quit icon)
-    // with symbol images. Tickle's menu is fully custom-drawn, so suppress them
+    // with symbol images. Peal's menu is fully custom-drawn, so suppress them
     // by swizzling the image getter to nil (Brent Simmons' technique).
     static func disableIcons() {
         guard let original = class_getInstanceMethod(NSMenuItem.self, #selector(getter: image)),
@@ -477,7 +477,7 @@ final class TimelineCard: FlippedView {
             baseColor = Theme.redSoft; boldColor = Theme.ink
             segments = [(isPerpetual ? "Each hour fits " : "This window fits ", false),
                         ("\(m) marks", true),
-                        (" — Tickle plays at most 9. Lengthen the interval", false),
+                        (" — Peal plays at most 9. Lengthen the interval", false),
                         (isPerpetual ? "." : " or shorten the window.", false)]
         } else if m == 0 {
             baseColor = Theme.redSoft; boldColor = Theme.ink
@@ -599,7 +599,7 @@ final class PreviewButton: FlippedView {
 
 // Horizontal volume slider shared by the menu's "Tick volume" row and the
 // config panel: accent-filled track, white knob, live percentage readout.
-// Scales every sound Tickle plays.
+// Scales every sound Peal plays.
 final class VolumeSlider: FlippedView {
     var value: Double { didSet { if value != oldValue { needsDisplay = true } } }  // 0…1
     var onChange: ((Double) -> Void)?  // continuous while dragging
@@ -1303,7 +1303,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     static let unitSeconds: [Double] = [1, 60, 3600]
 
     var statusItem: NSStatusItem!
-    var menuIcon: NSImage?
     var timers: [TickTimer] = []
     var rowViews: [TimerRowView] = []
     var footbar: FootbarView?
@@ -1343,13 +1342,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
-        // Feather template image from the bundle (image(forResource:) also picks
-        // up the @2x variant); falls back to the SF metronome when run bare.
-        if let feather = Bundle.main.image(forResource: "MenuIcon") {
-            feather.isTemplate = true
-            feather.size = NSSize(width: 18, height: 18)
-            menuIcon = feather
-        }
         rebuildMenu()
 
         // .common mode keeps the timer firing while the menu is open.
@@ -1436,7 +1428,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         menu.addItem(.separator())
-        menu.addItem(NSMenuItem(title: "Quit Tickle", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
+        menu.addItem(NSMenuItem(title: "Quit Peal", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
         statusItem.menu = menu
         menuSignature = sectionSignature()
     }
@@ -1482,15 +1474,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if sectionSignature() != menuSignature { rebuildMenu() }
 
         let anyActive = timers.contains { $0.isActive }
-        if let feather = menuIcon {
-            statusItem.button?.image = feather
-            statusItem.button?.appearsDisabled = !anyActive
-        } else {
-            let icon = NSImage(systemSymbolName: anyActive ? "metronome.fill" : "metronome",
-                               accessibilityDescription: "Tickle")
-            icon?.isTemplate = true
-            statusItem.button?.image = icon
-        }
+        let icon = NSImage(systemSymbolName: anyActive ? "bell.fill" : "bell",
+                           accessibilityDescription: "Peal")
+        icon?.isTemplate = true
+        statusItem.button?.image = icon
         let text = statusTitle()
         statusItem.button?.title = text.isEmpty ? "" : " " + text
 
@@ -1525,7 +1512,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 return "The interval is an hour or longer — no ticks would play. Shorten the interval."
             }
             if marks > 9 {
-                return "Each hour fits \(marks) tick marks — the most Tickle supports is 9. Lengthen the interval."
+                return "Each hour fits \(marks) tick marks — the most Peal supports is 9. Lengthen the interval."
             }
             return nil
         }
@@ -1537,7 +1524,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         let marks = Int(windowSeconds / intervalSeconds)
         if marks > 9 {
-            return "This window fits \(marks) tick marks — the most Tickle supports is 9. Lengthen the interval or shorten the window."
+            return "This window fits \(marks) tick marks — the most Peal supports is 9. Lengthen the interval or shorten the window."
         }
         return nil
     }
@@ -1731,7 +1718,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         content.addSubview(preview)
         y += 28 + 24
 
-        // Tick volume (global — scales every Tickle sound, live)
+        // Tick volume (global — scales every Peal sound, live)
         let cap4 = capLabel("Tick volume")
         cap4.setFrameOrigin(NSPoint(x: padX, y: y)); content.addSubview(cap4)
         y += 16 + 7
@@ -1811,7 +1798,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 }
 
+// One-time carry-over of settings saved before the Tickle → Peal rename, when
+// the bundle ID was com.garyrivera.tickle. Runs before AppDelegate reads its
+// defaults. Delete once no pre-rename installs remain.
+func migrateTickleDefaults() {
+    let defaults = UserDefaults.standard
+    guard let id = Bundle.main.bundleIdentifier,
+          defaults.persistentDomain(forName: id) == nil,
+          let legacy = defaults.persistentDomain(forName: "com.garyrivera.tickle")
+    else { return }
+    defaults.setPersistentDomain(legacy, forName: id)
+}
+
 MainActor.assumeIsolated {
+    migrateTickleDefaults()
     NSMenuItem.disableIcons()
     let app = NSApplication.shared
     let delegate = AppDelegate()
